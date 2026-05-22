@@ -9,7 +9,7 @@ Metamod:Source native plugin. Locks a CS2 bot to a weapon slot and blocks the AI
 
 | Target | Engine | Weapons |
 |---|---|---|
-| `Slot1` | 0 | Primary (rifle/sniper/SMG/shotgun) |
+| `Slot1` | 0 | Primary |
 | `Slot2` | 1 | Pistol |
 | `Slot3` | 2 | Knife / Zeus |
 | `Slot4` | 3 | Grenades (HE/flash/smoke/molotov/decoy) |
