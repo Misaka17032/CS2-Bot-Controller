@@ -1,12 +1,13 @@
 # CS2-Bot-Locker
 
-Metamod:Source plugin. Three orthogonal per-slot bot locks:
+CS2-Bot-Locker is a Metamod:Source plugin for Counter-Strike 2 that can lock Bot's Weapon/Aim/All
+It can be installed on win64 clients.
 
 - **Weapon** — pin a bot to one weapon slot; AI switches are blocked.
-- **Aim** — freeze `CCSBot::Upkeep`; view holds still, AI keeps deciding/moving/shooting.
-- **All** — freeze both `CCSBot::Update` and `CCSBot::Upkeep`; external code can take over.
+- **Aim** — freeze `CCSBot::Upkeep`; view holds still, AI keeps deciding/moving.
+- **All** — freeze both `CCSBot::Update` and `CCSBot::Upkeep`.
 
-Locks stack and clear independently.
+## Your stars⭐ are my motivation to keep updating
 
 **Version**: 0.3.0 · **ABI**: 4
 
@@ -17,7 +18,7 @@ Locks stack and clear independently.
 | `Slot1` | 0      | Primary                 |
 | `Slot2` | 1      | Pistol / Zeus           |
 | `Slot3` | 2      | Knife                   |
-| `Slot4` | 3      | Grenades      			 |
+| `Slot4` | 3      | Grenades      	    		 |
 | `Slot5` | 4      | C4                      |
 
 ## Install
@@ -49,7 +50,7 @@ bl_status
 ```
 bl_lock aim 1                # freeze bot 1's view, AI still runs
 bl_lock all 1                # full freeze
-bl_lock weapon 1 slot3       # force bot 1 to knife and hold
+bl_lock weapon 1 slot3       # force bot 1 to knife
 bl_unlock_all weapon         # clear every weapon lock
 ```
 
@@ -72,3 +73,6 @@ BotLocker.GetWeaponLock(slot);
 ```
 
 Main thread only.
+
+## License
+GPL-v3.0
