@@ -239,6 +239,11 @@ CON_COMMAND_F(bl_status,
         InputInjector::Status(),
         InputInjector::ProcessUsercmdAddress());
 
+    Commands::PrintToCaller(context,
+        "[BL] usercmd hook fired: %llu times | last slot=%d\n",
+        (unsigned long long)InputInjector::HookCallCount(),
+        InputInjector::LastResolvedSlot());
+
     // All lock
     int nAll = BotLockerState::CountAll();
     Commands::PrintToCaller(context, "[BL] all-locked count:    %d\n", nAll);
@@ -292,4 +297,56 @@ CON_COMMAND_F(bl_status,
             if (InputInjector::IsActive(s))
                 Commands::PrintToCaller(context, "[BL]   inject slot %2d\n", s);
     }
+}
+
+CON_COMMAND_F(bl_inject,
+              "bl_inject <slot> <forward> <side> <yaw> [buttons]  "
+              "Test ProcessUsercmd injection on a bot.",
+              FCVAR_NONE)
+{
+    using namespace BotLocker;
+
+    if (args.ArgC() < 5)
+    {
+        Commands::PrintToCaller(context,
+            "usage: bl_inject <slot> <forward> <side> <yaw> [buttons]\n");
+        return;
+    }
+
+    const int      slot    = std::atoi(args.Arg(1));
+    const float    forward = (float)std::atof(args.Arg(2));
+    const float    side    = (float)std::atof(args.Arg(3));
+    const float    yaw     = (float)std::atof(args.Arg(4));
+    const uint64_t buttons = args.ArgC() >= 6
+        ? std::strtoull(args.Arg(5), nullptr, 0) : 0;
+
+    // upMove/pitch unused for ground-walk test.
+    InjectedInput in{buttons, forward, side, 0.0f, 0.0f, yaw};
+    if (InputInjector::SetInput(slot, in))
+        Commands::PrintToCaller(context,
+            "[BL] inject slot %d: fwd=%.1f side=%.1f yaw=%.1f buttons=%llu\n",
+            slot, forward, side, yaw, (unsigned long long)buttons);
+    else
+        Commands::PrintToCaller(context,
+            "[BL] error: inject failed (slot out of range)\n");
+}
+
+CON_COMMAND_F(bl_inject_clear,
+              "bl_inject_clear <slot>  Stop injecting UserCmd for a bot.",
+              FCVAR_NONE)
+{
+    using namespace BotLocker;
+
+    if (args.ArgC() < 2)
+    {
+        Commands::PrintToCaller(context, "usage: bl_inject_clear <slot>\n");
+        return;
+    }
+
+    const int slot = std::atoi(args.Arg(1));
+    if (InputInjector::ClearInput(slot))
+        Commands::PrintToCaller(context, "[BL] inject cleared slot %d\n", slot);
+    else
+        Commands::PrintToCaller(context,
+            "[BL] error: clear failed (slot out of range)\n");
 }

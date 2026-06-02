@@ -1,8 +1,7 @@
 // ProcessUsercmd hook + 64-slot input override table.
 // On hook entry, write injected buttons to MovementServices+88 and overwrite
 // the cmd's move/view fields, then let the original ProcessUsercmd run.
-// I don't know if it works or not this **** funcion.
-// SO I HIGHLY RECOMMOND NOT USING THIS ON YOUR PROJECT!!!
+// move values are normalized -1..+1 (engine scales by maxspeed).
 
 #include "InputInjector.h"
 #include "ccsbot_slot.h"
@@ -50,6 +49,10 @@ namespace BotLocker
         static bool             g_installed          = false;
         static std::string      g_status             = "not_attempted";
 
+        // Diagnostics: total hook fires and the last slot we resolved.
+        static std::atomic<uint64_t> g_hookCalls{0};
+        static std::atomic<int>      g_lastSlot{-1};
+
         // services -> player slot via pawn ptr at services+56, then m_hController.
         static int ServicesToSlot(void *services)
         {
@@ -63,7 +66,9 @@ namespace BotLocker
         // Overwrite buttons/move/view fields.
         static void __fastcall HookedProcessUsercmd(void *services, void *cmd)
         {
+            g_hookCalls.fetch_add(1, std::memory_order_relaxed);
             int slot = ServicesToSlot(services);
+            g_lastSlot.store(slot, std::memory_order_relaxed);
             if (slot >= 0 && slot < kMaxSlots && g_slots[slot].active.load(std::memory_order_acquire))
             {
                 const InjectedInput &p = g_slots[slot].input;
@@ -230,6 +235,16 @@ namespace BotLocker
             for (auto &s : g_slots)
                 if (s.active.load(std::memory_order_acquire)) ++n;
             return n;
+        }
+
+        uint64_t HookCallCount()
+        {
+            return g_hookCalls.load(std::memory_order_relaxed);
+        }
+
+        int LastResolvedSlot()
+        {
+            return g_lastSlot.load(std::memory_order_relaxed);
         }
     }
 }

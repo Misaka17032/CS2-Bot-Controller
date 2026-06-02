@@ -1,7 +1,6 @@
 // MinHook for CCSPlayer_MovementServices::ProcessUsercmd.
-// Lets the host plugin override per-slot UserCmd input (buttons/move/view)
-// I don't know if it works or not this **** funcion.
-// SO I HIGHLY RECOMMOND NOT USING THIS ON YOUR PROJECT!!!
+// Lets the host plugin override per-slot UserCmd input (buttons/move/view),
+// e.g. to drive a bot from external code such as demo replay.
 
 #pragma once
 
@@ -52,5 +51,9 @@ namespace BotLocker
         // bl_status queries.
         bool IsActive(int slot);
         int  CountActive();
+
+        // Diagnostics: how many times the hook fired, and last slot it resolved.
+        uint64_t HookCallCount();
+        int      LastResolvedSlot();
     }
 }
