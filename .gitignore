@@ -9,6 +9,12 @@ cmake-build-*/
 *.pdb
 *.obj
 
+# .NET (csharp/BotRecorder)
+bin/
+obj/
+*.nupkg
+project.assets.json
+
 .vs/
 .vscode/
 .idea/
@@ -19,3 +25,4 @@ CMakeUserPresets.json
 *.log
 CLAUDE.md
 .gitignore
+docs/

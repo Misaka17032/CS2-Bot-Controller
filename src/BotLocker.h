@@ -21,5 +21,6 @@ namespace BotLocker
         void *UpdateAddress();
         void *UpkeepAddress();
         void *JumpAddress();
+        void *UpdateLookAnglesAddress();
     }
 }

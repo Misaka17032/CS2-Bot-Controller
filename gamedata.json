@@ -5,7 +5,7 @@
       "windows": "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 8B F9 84 D2",
       "linux": ""
     },
-    "comment": "AI: bot picks and equips its best weapon."
+    "comment": "Bot: bot picks and equips its best weapon."
   },
   "CCSBot::EquipPistol": {
     "signatures": {
@@ -13,7 +13,7 @@
       "windows": "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 8B D9 84 D2",
       "linux": ""
     },
-    "comment": "AI: bot switches to its pistol secondary."
+    "comment": "Bot: bot switches to its pistol secondary."
   },
   "CCSPlayer_WeaponServices::SelectItem": {
     "signatures": {
@@ -21,7 +21,7 @@
       "windows": "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? 41 8B E8 48 8B DA 48 8B F1",
       "linux": ""
     },
-    "comment": "Funnel for any weapon switch (AI, pickup, buy, ammo-out, slotN)."
+    "comment": "Funnel for any weapon switch"
   },
   "CCSPlayer_WeaponServices::GetSlot": {
     "signatures": {
@@ -37,7 +37,7 @@
       "windows": "40 55 56 57 41 55 48 8D AC 24 ? ? ? ? 48 81 EC ? ? ? ? 48 8D 05",
       "linux": ""
     },
-    "comment": "AI: per-tick decision entry; PathFollower + look-around + reaction + weapon."
+    "comment": "Bot: per-tick decision entry; PathFollower + look-around + reaction + weapon."
   },
   "CCSBot::Upkeep": {
     "signatures": {
@@ -45,7 +45,7 @@
       "windows": "40 53 57 41 54 48 81 EC",
       "linux": ""
     },
-    "comment": "AI: per-frame view maintenance; UpdateLookAround + jitter + UpdateLookAngles."
+    "comment": "Bot: per-frame view mBotntenance; UpdateLookAround + jitter + UpdateLookAngles."
   },
   "CCSBot::Jump": {
     "signatures": {
@@ -53,7 +53,15 @@
       "windows": "48 89 5C 24 ? 57 48 83 EC ? 48 8B D9 0F B6 FA 48 8B 49 ? 48 8B 91",
       "linux": ""
     },
-    "comment": "AI: bot requests a jump."
+    "comment": "Bot: bot requests a jump."
+  },
+  "CCSBot::UpdateLookAngles": {
+    "signatures": {
+      "library": "server",
+      "windows": "40 55 53 56 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 48 8D 05",
+      "linux": ""
+    },
+    "comment": "Bot: spring-smooths view to m_lookPitch/m_lookYaw."
   },
   "CCSPlayer_MovementServices::ProcessUsercmd": {
     "signatures": {
@@ -61,6 +69,6 @@
       "windows": "40 57 41 57 48 81 EC ? ? ? ? 48 83 79",
       "linux": ""
     },
-    "comment": "Per-cmd entry. We hook here to inject buttons (this+88) and cmd fields (move/view) for bot replay."
+    "comment": "Per-cmd entry."
   }
 }

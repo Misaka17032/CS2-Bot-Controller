@@ -15,6 +15,7 @@
 #include "WeaponLocker.h"
 #include "BotLocker.h"
 #include "InputInjector.h"
+#include "MotionRecorder.h"
 #include "dispatch.h"
 #include "WeaponLockerState.h"
 #include "BotLockerState.h"
@@ -30,7 +31,7 @@ public:
     bool Unpause(char * /*error*/, size_t /*maxlen*/) override { return true; }
     void AllPluginsLoaded() override {}
 
-    const char *GetAuthor() override { return "XBribo"; }
+    const char *GetAuthor() override { return "XBribo(๑•.•๑)"; }
     const char *GetName() override { return "BotLocker"; }
     const char *GetDescription() override { return "Lock CS2 bots: freeze AI tick and/or pin to a weapon slot."; }
     const char *GetURL() override { return ""; }
@@ -63,7 +64,8 @@ static std::string ComputeGamedataPath()
     for (int i = 0; i < 3; ++i)
     {
         char *slash = std::strrchr(path, '\\');
-        if (!slash) return "";
+        if (!slash)
+            return "";
         *slash = '\0';
     }
     std::string result(path);
@@ -155,6 +157,7 @@ bool BotLockerPlugin::Load(PluginId id, ISmmAPI *ismm,
 
 bool BotLockerPlugin::Unload(char * /*error*/, size_t /*maxlen*/)
 {
+    BotLocker::MotionRecorder::ClearAll();
     BotLocker::InputInjector::Remove();
     BotLocker::BotLockerHooks::Remove();
     BotLocker::WeaponLockerHooks::Remove();

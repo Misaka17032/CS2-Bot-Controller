@@ -6,6 +6,8 @@
 #include "WeaponLockerState.h"
 #include "ccsbot_slot.h"
 #include "dispatch.h"
+#include "MotionRecorder.h"
+#include "version_targets.h"
 
 #include <Windows.h>
 #include <MinHook.h>
@@ -20,15 +22,12 @@
 #include <mutex>
 #include <unordered_map>
 
+namespace tg = cs2bl::targets;
+
 using EquipBestWeapon_t = void(__fastcall *)(void *self, char mustEquip);
 using EquipPistol_t     = void(__fastcall *)(void *self, char mustEquip);
 using SelectItem_t      = char(__fastcall *)(void *ws, void *weapon, int flag);
 using GetSlot_t         = void *(__fastcall *)(void *ws, int slot, unsigned int mask);
-
-// pawn (CCSPlayerPawn*) -> WeaponServices* lives at +0xA00.
-static constexpr int kOffsetWeaponServicesInPawn = 0xA00;
-// CCSBot* -> pawn* lives at +0x18.
-static constexpr int kOffsetPawnInBot            = 0x18;
 
 namespace BotLocker
 {
@@ -77,10 +76,10 @@ namespace BotLocker
         {
             if (!bot || slot < 0 || slot >= 64) return;
             void *pawn = *reinterpret_cast<void **>(
-                reinterpret_cast<char *>(bot) + kOffsetPawnInBot);
+                reinterpret_cast<char *>(bot) + tg::kBot_Pawn);
             if (!pawn) return;
             void *ws = *reinterpret_cast<void **>(
-                reinterpret_cast<char *>(pawn) + kOffsetWeaponServicesInPawn);
+                reinterpret_cast<char *>(pawn) + tg::kPawn_WeaponServices);
             if (!ws) return;
             std::lock_guard<std::mutex> lk(g_wsToSlotMu);
             g_wsToBinding[ws] = {slot, pawn};
@@ -152,6 +151,22 @@ namespace BotLocker
 
         static char __fastcall HookedSelectItem(void *ws, void *weapon, int flag)
         {
+            // Recording tap: a human switching weapons calls SelectItem with the
+            // target weapon pointer directly (no handle resolution needed). Read
+            // its item-def index and attribute it to any recording slot whose
+            // live ws matches. Read-only; never alters the call's behavior.
+            if (weapon)
+            {
+                int def = *reinterpret_cast<uint16_t *>(
+                    reinterpret_cast<char *>(weapon) + tg::kWeapon_ItemDefIndex);
+                for (int s = 0; s < MotionRecorder::kMaxSlots; ++s)
+                {
+                    if (MotionRecorder::IsRecording(s) &&
+                        MotionRecorder::LiveWs(s) == ws)
+                        MotionRecorder::SetCurrentDef(s, def);
+                }
+            }
+
             WsBinding bind = LookupBindingForWs(ws);
             if (bind.slot < 0)
                 return g_origSelectItem(ws, weapon, flag);
@@ -343,6 +358,104 @@ namespace BotLocker
         void *EquipPistolAddress()       { return g_addrEquipPistol; }
         void *SelectItemAddress()        { return g_addrSelectItem; }
         void *GetSlotAddress()           { return g_addrGetSlot; }
+
+        // ---- MotionRecorder helpers ----
+
+        bool WeaponHooksReady()
+        {
+            return g_installed && g_pGetSlot && g_origSelectItem;
+        }
+
+        int ReadDefIndex(void *weapon)
+        {
+            if (!weapon) return -1;
+            return *reinterpret_cast<uint16_t *>(
+                reinterpret_cast<char *>(weapon) + tg::kWeapon_ItemDefIndex);
+        }
+
+        // entity -> identity(0x10) -> m_EHandle(0x10), low 15 bits = index.
+        static int EntIndexOf(void *entity)
+        {
+            if (!entity) return -1;
+            void *identity = *reinterpret_cast<void **>(
+                reinterpret_cast<char *>(entity) + tg::kEnt_Identity);
+            if (!identity) return -1;
+            uint32_t h = *reinterpret_cast<uint32_t *>(
+                reinterpret_cast<char *>(identity) + tg::kEntIdentity_EHandle);
+            if (h == 0u || h == 0xFFFFFFFFu) return -1;
+            return static_cast<int>(h & 0x7FFFu);
+        }
+
+        int ActiveWeaponDef(void *ws)
+        {
+            if (!ws || !g_pGetSlot) return -1;
+            // m_hActiveWeapon is a handle; resolve it by matching its entity
+            // index against the pointers GetSlot returns (no entitysystem).
+            uint32_t activeH = *reinterpret_cast<uint32_t *>(
+                reinterpret_cast<char *>(ws) + tg::kWs_ActiveWeapon);
+            if (activeH == 0u || activeH == 0xFFFFFFFFu) return -1;
+            int activeIdx = static_cast<int>(activeH & 0x7FFFu);
+            for (int slot = 0; slot <= 4; ++slot)
+            {
+                // GEAR_SLOT_GRENADES (3) holds every grenade type at once;
+                // enumerate positions to find the specific active one. The
+                // other slots hold one weapon, so position=-1 suffices.
+                unsigned int maxPos = (slot == 3) ? 8u : 1u;
+                for (unsigned int pos = 0; pos < maxPos; ++pos)
+                {
+                    unsigned int posArg = (slot == 3) ? pos : 0xFFFFFFFFu;
+                    void *w = g_pGetSlot(ws, slot, posArg);
+                    if (w && EntIndexOf(w) == activeIdx)
+                    {
+                        int def = ReadDefIndex(w);
+                        // Engine slot 2 holds knife AND taser. Normalize any
+                        // knife skin to kKnifeDef; keep the taser (31) as-is.
+                        if (slot == 2 && def != 31) return kKnifeDef;
+                        return def;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        void *FindWeaponByDef(void *ws, int def)
+        {
+            if (!ws || def < 0 || !g_pGetSlot) return nullptr;
+            // kKnifeDef means "the bot's own slot-2 knife", whatever skin it is.
+            if (def == kKnifeDef)
+                return g_pGetSlot(ws, 2, 0xFFFFFFFFu);
+            // Non-grenade gear slots hold one weapon each; position=-1
+            // (0xFFFFFFFF) returns it directly. Grenades (slot 3) handled below.
+            for (int slot = 0; slot <= 4; ++slot)
+            {
+                if (slot == 3) continue;
+                void *w = g_pGetSlot(ws, slot, 0xFFFFFFFFu);
+                if (w && ReadDefIndex(w) == def) return w;
+            }
+            // GEAR_SLOT_GRENADES (3) holds every grenade type at once. GetSlot's
+            // 3rd arg is a position, not a mask: enumerate positions to reach
+            // each carried grenade and match the requested def exactly.
+            for (unsigned int pos = 0; pos < 8; ++pos)
+            {
+                void *w = g_pGetSlot(ws, 3, pos);
+                if (w && ReadDefIndex(w) == def) return w;
+            }
+            return nullptr;
+        }
+
+        bool SelectWeaponRaw(void *ws, void *weapon)
+        {
+            if (!ws || !weapon || !g_origSelectItem) return false;
+            g_origSelectItem(ws, weapon, 0);
+            return true;
+        }
+
+        void *WsForSlot(int slot)
+        {
+            if (slot < 0 || slot >= 64) return nullptr;
+            std::lock_guard<std::mutex> lk(g_wsToSlotMu);
+            return g_slotToWs[slot];
+        }
 
         int SwitchToLockTarget(int slot)
         {

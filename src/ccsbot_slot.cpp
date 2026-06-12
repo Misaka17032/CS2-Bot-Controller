@@ -1,6 +1,7 @@
 // CCSBot* -> player slot via pawn (+0x18) -> m_hController (+0xB80).
 
 #include "ccsbot_slot.h"
+#include "version_targets.h"
 
 #include <cstdint>
 #include <mutex>
@@ -8,16 +9,12 @@
 
 #include <tier0/dbg.h>
 
+namespace tg = cs2bl::targets;
+
 namespace BotLocker
 {
     // Compile-time switch to turn the once-per-bot diagnostic scan back on.
     static constexpr bool kEnableHandleScan = false;
-
-    static constexpr int kOffsetPawnInBot               = 0x18;
-    static constexpr int kOffsetEntityIdentityInPawn    = 0x10;
-    static constexpr int kOffsetEHandleInEntityIdentity = 0x10;
-    static constexpr int kOffsetControllerHandleInPawn  = 0xB80;
-    static constexpr int kOffsetOriginalControllerInPawn = 0xB84;
 
     static std::unordered_set<void *> g_scanned;
     static std::mutex                 g_scannedMu;
@@ -51,16 +48,16 @@ namespace BotLocker
         if (!bot) return out;
 
         void *pawn = *reinterpret_cast<void **>(
-            reinterpret_cast<char *>(bot) + kOffsetPawnInBot);
+            reinterpret_cast<char *>(bot) + tg::kBot_Pawn);
         if (!pawn) return out;
         out.pawn = pawn;
 
         void *identity = *reinterpret_cast<void **>(
-            reinterpret_cast<char *>(pawn) + kOffsetEntityIdentityInPawn);
+            reinterpret_cast<char *>(pawn) + tg::kEnt_Identity);
         if (identity)
         {
             uint32_t handle = *reinterpret_cast<uint32_t *>(
-                reinterpret_cast<char *>(identity) + kOffsetEHandleInEntityIdentity);
+                reinterpret_cast<char *>(identity) + tg::kEntIdentity_EHandle);
             int idx = EntIndexFromHandle(handle);
             if (idx > 0) out.pawnEntIndex = idx;
         }
@@ -68,12 +65,12 @@ namespace BotLocker
         // Read m_hController; fall back to m_hOriginalController if the
         // primary handle isn't populated for this pawn yet.
         uint32_t ctrlHandle = *reinterpret_cast<uint32_t *>(
-            reinterpret_cast<char *>(pawn) + kOffsetControllerHandleInPawn);
+            reinterpret_cast<char *>(pawn) + tg::kPawn_Controller);
         int ctrlIdx = EntIndexFromHandle(ctrlHandle);
         if (ctrlIdx < 1 || ctrlIdx > 64)
         {
             uint32_t origHandle = *reinterpret_cast<uint32_t *>(
-                reinterpret_cast<char *>(pawn) + kOffsetOriginalControllerInPawn);
+                reinterpret_cast<char *>(pawn) + tg::kPawn_OriginalController);
             ctrlIdx = EntIndexFromHandle(origHandle);
         }
         if (ctrlIdx >= 1 && ctrlIdx <= 64)
@@ -99,7 +96,7 @@ namespace BotLocker
     {
         if (!pawn) return -1;
         uint32_t h = *reinterpret_cast<uint32_t *>(
-            reinterpret_cast<char *>(pawn) + kOffsetControllerHandleInPawn);
+            reinterpret_cast<char *>(pawn) + tg::kPawn_Controller);
         int idx = EntIndexFromHandle(h);
         if (idx < 1 || idx > 64) return -1;
         return idx - 1;

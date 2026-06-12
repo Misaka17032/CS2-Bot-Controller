@@ -78,6 +78,7 @@ add_library(BotLocker SHARED
     src/WeaponLocker.cpp
     src/BotLocker.cpp
     src/InputInjector.cpp
+    src/MotionRecorder.cpp
     src/sig_scan.cpp
     src/WeaponLockerState.cpp
     src/BotLockerState.cpp
