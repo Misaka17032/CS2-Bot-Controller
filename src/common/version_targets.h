@@ -83,12 +83,6 @@ namespace BotController::targets
     // m_vecAbsOrigin — post-move origin written here before FinishMove commits
     inline int kMove_AbsOrigin = 200;
 
-    // ---- CUserCmd ----
-
-    inline int kCmd_ForwardMove = 44;
-    inline int kCmd_SideMove = 48;
-    inline int kCmd_UpMove = 52;
-
     // ---- vtable indices (CCSPlayer_MovementServices) ----
 
     inline int kVtIdx_PlayerRunCommand = 22;

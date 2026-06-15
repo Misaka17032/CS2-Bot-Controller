@@ -290,27 +290,6 @@
     },
     "comment": "m_vecAbsOrigin (200). linux: TODO"
   },
-  "CUserCmd::ForwardMove": {
-    "offsets": {
-      "windows": 44,
-      "linux": 0
-    },
-    "comment": "forwardmove (44). linux: TODO"
-  },
-  "CUserCmd::SideMove": {
-    "offsets": {
-      "windows": 48,
-      "linux": 0
-    },
-    "comment": "sidemove (48). linux: TODO"
-  },
-  "CUserCmd::UpMove": {
-    "offsets": {
-      "windows": 52,
-      "linux": 0
-    },
-    "comment": "upmove (52). linux: TODO"
-  },
   "vtidx::PlayerRunCommand": {
     "offsets": {
       "windows": 22,
