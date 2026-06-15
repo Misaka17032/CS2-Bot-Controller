@@ -221,7 +221,7 @@ add_custom_command(TARGET BotController POST_BUILD
         "${CMAKE_BINARY_DIR}/BotController.vdf"
         "${CMAKE_BINARY_DIR}/package/addons/metamod/BotController.vdf"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/gamedata.json"
+        "${CMAKE_SOURCE_DIR}/configs/addons/BotController/gamedata.json"
         "${CMAKE_BINARY_DIR}/package/addons/BotController/gamedata.json"
 )
 
