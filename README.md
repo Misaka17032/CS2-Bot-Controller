@@ -1,6 +1,6 @@
-# CS2-Bot-Locker
+# CS2-Bot-Controller
 
-CS2-Bot-Locker is a Metamod:Source plugin for Counter-Strike 2 that can lock Bot's Weapon/Aim/Jump/All
+CS2-Bot-Controller is a Metamod:Source plugin for Counter-Strike 2 that can lock Bot's Weapon/Aim/Jump/All
 It can be installed on win64 clients.
 
 - **Weapon** — pin a bot to one weapon slot; AI switches are blocked.
@@ -10,7 +10,7 @@ It can be installed on win64 clients.
 
 ## Your stars⭐ are my motivation to keep updating
 
-**Version**: 0.5.0 · **ABI**: 9
+**Version**: 0.4.3 · **ABI**: 10
 
 ------------------------------------------------------------------------
 
@@ -28,9 +28,9 @@ It can be installed on win64 clients.
 
 ## Install
 
-- `BotLocker.dll` → `csgo/addons/BotLocker/bin/win64/`
-- `gamedata.json` → `csgo/addons/BotLocker/`
-- `BotLocker.vdf`  → `csgo/addons/metamod/`
+- `BotController.dll` → `csgo/addons/BotController/bin/win64/`
+- `gamedata.json` → `csgo/addons/BotController/`
+- `BotController.vdf`  → `csgo/addons/metamod/`
 
 ------------------------------------------------------------------------
 
@@ -68,21 +68,21 @@ bl_unlock_all weapon         # clear every weapon lock
 
 ## CounterStrikeSharp API
 
-Drop `scripts/BotLocker.NativeApi.cs` into your project.
+Drop `scripts/BotController.NativeApi.cs` into your project.
 
 ```csharp
-using BotLockerApi;
+using BotControllerApi;
 
-if (!BotLocker.IsCompatible()) return;   // requires ABI 5
+if (!BotController.IsCompatible()) return;   // requires ABI 5
 
-BotLocker.Lock(slot, LockKind.Aim);
-BotLocker.Lock(slot, LockKind.Jump);
-BotLocker.Lock(slot, LockKind.All);
-BotLocker.Lock(slot, LockTarget.Slot3);  // weapon lock
-BotLocker.Unlock(slot, LockKind.Aim);
-BotLocker.UnlockAll(LockKind.Weapon);
-BotLocker.IsLocked(slot, LockKind.Aim);
-BotLocker.GetWeaponLock(slot);
+BotController.Lock(slot, LockKind.Aim);
+BotController.Lock(slot, LockKind.Jump);
+BotController.Lock(slot, LockKind.All);
+BotController.Lock(slot, LockTarget.Slot3);  // weapon lock
+BotController.Unlock(slot, LockKind.Aim);
+BotController.UnlockAll(LockKind.Weapon);
+BotController.IsLocked(slot, LockKind.Aim);
+BotController.GetWeaponLock(slot);
 ```
 
 Main thread only.

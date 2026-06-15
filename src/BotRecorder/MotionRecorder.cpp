@@ -14,9 +14,9 @@
 #include <mutex>
 #include <vector>
 
-namespace tg = cs2bl::targets;
+namespace tg = BotController::targets;
 
-namespace BotLocker
+namespace BotController
 {
     namespace MotionRecorder
     {
@@ -50,18 +50,14 @@ namespace BotLocker
         static std::array<RecordState, kMaxSlots> g_rec;
         static std::array<ReplayState, kMaxSlots> g_rep;
 
-        /* ! Replay-rate probe: QPC stamp of each slot's last commit, to measure
-           wall-clock spacing between consumed ticks (uniform vs bursty) */
+        /* ! Replay-rate probe */
         static LARGE_INTEGER g_qpcFreq{};
         static int64_t g_lastCommitQpc[kMaxSlots] = {0};
-        /* ? Velocity-vs-displacement probe: previous post origin per slot, to
-           derive real speed from motion and compare against networked speed */
+        /* ? Velocity-vs-displacement probe */
         static float g_lastPostX[kMaxSlots] = {0};
         static float g_lastPostY[kMaxSlots] = {0};
         static bool g_haveLastPost[kMaxSlots] = {false};
-        /* ? Record-side probe: QPC + node origin of each slot's previous
-           capture. Bursty dt => multiple captures per server tick (subtick);
-           uniform dt => single capture, sampling-phase issue */
+        /* ? Record-side probe */
         static int64_t g_recLastQpc[kMaxSlots] = {0};
         static float g_recLastNodeX[kMaxSlots] = {0};
         static float g_recLastNodeY[kMaxSlots] = {0};
@@ -85,7 +81,20 @@ namespace BotLocker
             out.velZ = *reinterpret_cast<float *>(p + tg::kEnt_AbsVelocity + 8);
             out.entityFlags = *reinterpret_cast<uint32_t *>(p + tg::kEnt_Flags);
             out.moveType = *reinterpret_cast<uint8_t *>(p + tg::kEnt_MoveType);
+            out.actualMoveType = *reinterpret_cast<uint8_t *>(p + tg::kEnt_ActualMoveType);
             out.buttons = *reinterpret_cast<uint64_t *>(s + tg::kServices_Buttons);
+            out.buttons1 = *reinterpret_cast<uint64_t *>(s + tg::kServices_Buttons1);
+            out.buttons2 = *reinterpret_cast<uint64_t *>(s + tg::kServices_Buttons2);
+
+            // duck/ladder state (drives crouch + ladder anim on replay)
+            out.duckAmount = *reinterpret_cast<float *>(s + tg::kServices_DuckAmount);
+            out.duckSpeed = *reinterpret_cast<float *>(s + tg::kServices_DuckSpeed);
+            out.ladderNormalX = *reinterpret_cast<float *>(s + tg::kServices_LadderNormal + 0);
+            out.ladderNormalY = *reinterpret_cast<float *>(s + tg::kServices_LadderNormal + 4);
+            out.ladderNormalZ = *reinterpret_cast<float *>(s + tg::kServices_LadderNormal + 8);
+            out.ducked = *reinterpret_cast<uint8_t *>(s + tg::kServices_Ducked);
+            out.ducking = *reinterpret_cast<uint8_t *>(s + tg::kServices_Ducking);
+            out.desiresDuck = *reinterpret_cast<uint8_t *>(s + tg::kServices_DesiresDuck);
 
             // view angles from pawn v_angle
             out.pitch = *reinterpret_cast<float *>(p + tg::kPawn_ViewAngle + 0);
@@ -205,6 +214,19 @@ namespace BotLocker
             r.pendingSubs.clear();
             for (int i = 0; i < count; ++i)
                 r.pendingSubs.push_back(moves[i]);
+
+            /* ? Record-side subtick diagnostic */
+            for (int i = 0; i < count; ++i)
+            {
+                if (moves[i].button & 1u)
+                {
+                    char dbg[160];
+                    std::snprintf(dbg, sizeof(dbg),
+                                  "[BL][recSt] slot=%d i=%d btn=%u pressed=%.2f when=%.3f\n",
+                                  slot, i, moves[i].button, moves[i].pressed, moves[i].when);
+                    OutputDebugStringA(dbg);
+                }
+            }
         }
 
         void OnCapturePost(int slot, void *services, void *cmd)
@@ -220,11 +242,6 @@ namespace BotLocker
             if (!ReadSnapshot(services, post))
                 return;
 
-            /* * Root-cause fix: ReadSnapshot pulls origin from the scene node,
-               which still holds this tick's START (the commit happens later in
-               the outer FinishMove). The mover's real END position lives in
-               MoveData; record that so post.origin matches post.velocity and
-               loses the one-tick lag that made accel/turn replay stutter */
             if (cmd)
             {
                 auto *m = reinterpret_cast<char *>(cmd);
@@ -288,9 +305,9 @@ namespace BotLocker
 
             char dbg[256];
             std::snprintf(dbg, sizeof(dbg),
-                          "[BL][rec] t=%d dt_us=%lld mt=%u nSub=%u velR=%.1f nodeD=%.1f "
+                          "[BL][rec] t=%d dt_us=%lld mt=%u nSub=%u def=%d velR=%.1f nodeD=%.1f "
                           "node=(%.1f,%.1f) mv=(%.1f,%.1f)\n",
-                          tickIdx, dtUs, (unsigned)post.moveType, nSub, velR, nodeD,
+                          tickIdx, dtUs, (unsigned)post.moveType, nSub, def, velR, nodeD,
                           post.originX, post.originY, mvX, mvY);
             OutputDebugStringA(dbg);
         }
@@ -451,6 +468,28 @@ namespace BotLocker
             return n;
         }
 
+        bool CurrentReplayInputButtons(int slot, uint64_t &b0, uint64_t &b1,
+                                       uint64_t &b2)
+        {
+            if (!ValidSlot(slot))
+                return false;
+            ReplayState &p = g_rep[slot];
+            if (!p.playing.load(std::memory_order_acquire))
+                return false;
+            std::lock_guard<std::mutex> lk(p.mu);
+            int total = static_cast<int>(p.ticks.size());
+            int cur = p.cursor.load(std::memory_order_relaxed);
+            if (cur < 0 || cur >= total)
+                return false;
+            uint64_t heldNow = p.ticks[cur].pre.buttons;
+            // Previous tick's held mask; 0 before the first tick so the opening press registers as a fresh edge.
+            uint64_t heldPrev = (cur > 0) ? p.ticks[cur - 1].pre.buttons : 0;
+            b0 = heldNow;
+            b1 = heldNow & ~heldPrev; // pressed this tick
+            b2 = heldPrev & ~heldNow; // released this tick
+            return true;
+        }
+
         bool SwitchBotWeaponByDef(int slot, int defIndex)
         {
             if (!ValidSlot(slot) || defIndex < 0)
@@ -464,6 +503,53 @@ namespace BotLocker
             if (!weapon)
                 return false;
             return WeaponLockerHooks::SelectWeaponRaw(ws, weapon);
+        }
+
+        // Def index of the bot's current active weapon
+        int BotActiveWeaponDef(int slot)
+        {
+            if (!ValidSlot(slot) || !WeaponLockerHooks::WeaponHooksReady())
+                return -1;
+            void *ws = WeaponLockerHooks::WsForSlot(slot);
+            if (!ws)
+                return -1;
+            return WeaponLockerHooks::ActiveWeaponDef(ws);
+        }
+
+        // Entity index for cmd.weaponselect this replay tick
+        int CurrentReplayWeaponSelect(int slot)
+        {
+            if (!ValidSlot(slot) || !WeaponLockerHooks::WeaponHooksReady())
+                return -1;
+
+            // Recorded def for the tick about to be simulated
+            int recordedDef;
+            {
+                ReplayState &p = g_rep[slot];
+                if (!p.playing.load(std::memory_order_acquire))
+                    return -1;
+                std::lock_guard<std::mutex> lk(p.mu);
+                int total = static_cast<int>(p.ticks.size());
+                int cur = p.cursor.load(std::memory_order_relaxed);
+                if (cur < 0 || cur >= total)
+                    return -1;
+                recordedDef = p.ticks[cur].weaponDefIndex;
+            }
+            if (recordedDef < 0)
+                return -1;
+
+            void *ws = WeaponLockerHooks::WsForSlot(slot);
+            if (!ws)
+                return -1;
+
+            // Already holding the recorded weapon -> no switch
+            if (WeaponLockerHooks::ActiveWeaponDef(ws) == recordedDef)
+                return -1;
+
+            void *weapon = WeaponLockerHooks::FindWeaponByDef(ws, recordedDef);
+            if (!weapon)
+                return -1;
+            return WeaponLockerHooks::WeaponEntIndex(weapon);
         }
 
         // Write velocity + view angles onto the pawn
@@ -519,6 +605,10 @@ namespace BotLocker
             WriteMoveData(moveData, t.pre);
             WriteAnglesVelToPawn(services, t.pre);
             auto *sv = reinterpret_cast<char *>(services);
+            // Feed recorded buttons so the engine's Duck()/ladder logic runs
+            *reinterpret_cast<uint64_t *>(sv + tg::kServices_Buttons) = t.pre.buttons;
+            *reinterpret_cast<uint64_t *>(sv + tg::kServices_Buttons1) = t.pre.buttons1;
+            *reinterpret_cast<uint64_t *>(sv + tg::kServices_Buttons2) = t.pre.buttons2;
             void *pawn = *reinterpret_cast<void **>(sv + tg::kServices_Pawn);
             if (pawn)
             {
@@ -614,17 +704,27 @@ namespace BotLocker
             {
                 auto *pp = reinterpret_cast<char *>(pawn);
                 *reinterpret_cast<uint8_t *>(pp + tg::kEnt_MoveType) = t.post.moveType;
-                // Merge ground bit from the recording, keep the rest live.
+                *reinterpret_cast<uint8_t *>(pp + tg::kEnt_ActualMoveType) = t.post.actualMoveType;
+                // Merge ground + ducking bits from the recording, keep the rest live.
                 uint32_t live = *reinterpret_cast<uint32_t *>(pp + tg::kEnt_Flags);
-                live = (live & ~1u) | (t.post.entityFlags & 1u);
+                uint32_t mask = tg::kFL_OnGround | tg::kFL_Ducking;
+                live = (live & ~mask) | (t.post.entityFlags & mask);
                 *reinterpret_cast<uint32_t *>(pp + tg::kEnt_Flags) = live;
             }
 
+            // Overwrite duck/ladder state
+            *reinterpret_cast<float *>(sv + tg::kServices_DuckAmount) = t.post.duckAmount;
+            *reinterpret_cast<float *>(sv + tg::kServices_DuckSpeed) = t.post.duckSpeed;
+            *reinterpret_cast<float *>(sv + tg::kServices_LadderNormal + 0) = t.post.ladderNormalX;
+            *reinterpret_cast<float *>(sv + tg::kServices_LadderNormal + 4) = t.post.ladderNormalY;
+            *reinterpret_cast<float *>(sv + tg::kServices_LadderNormal + 8) = t.post.ladderNormalZ;
+            *reinterpret_cast<uint8_t *>(sv + tg::kServices_Ducked) = t.post.ducked;
+            *reinterpret_cast<uint8_t *>(sv + tg::kServices_Ducking) = t.post.ducking;
+            *reinterpret_cast<uint8_t *>(sv + tg::kServices_DesiresDuck) = t.post.desiresDuck;
+
             p.cursor.store(cur + 1, std::memory_order_relaxed);
 
-            /* ! Rate probe: wall-clock us since this slot's previous commit.
-               Uniform ~15625us => server side fine (look at client interp);
-               bursty (0 / 30000+ alternating) => ticks consumed unevenly */
+            /* ! Rate probe */
             if (g_qpcFreq.QuadPart == 0)
                 QueryPerformanceFrequency(&g_qpcFreq);
             LARGE_INTEGER now;
@@ -633,9 +733,7 @@ namespace BotLocker
             g_lastCommitQpc[slot] = now.QuadPart;
             long long dtUs = prev ? (now.QuadPart - prev) * 1000000LL / g_qpcFreq.QuadPart : -1;
 
-            /* ? Speed consistency: networked speed (velR) vs speed derived from
-               this tick's actual displacement * 64 (velD). They must match;
-               divergence during accel/turn => client over-extrapolates => stutter */
+            /* ? Speed probe */
             float velR = std::sqrt(t.post.velX * t.post.velX + t.post.velY * t.post.velY);
             float velD = -1.0f;
             if (g_haveLastPost[slot])

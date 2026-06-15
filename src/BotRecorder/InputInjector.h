@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace BotLocker
+namespace BotController
 {
     // Injected input applied for one slot until ClearInput.
     struct InjectedInput

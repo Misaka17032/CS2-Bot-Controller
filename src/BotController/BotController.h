@@ -4,9 +4,9 @@
 
 #include <string>
 
-namespace BotLocker
+namespace BotController
 {
-    namespace BotLockerHooks
+    namespace BotControllerHooks
     {
         // Resolve sigs and install detours.
         bool Install(const std::string &gamedataPath,

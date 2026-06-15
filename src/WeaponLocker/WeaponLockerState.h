@@ -2,7 +2,7 @@
 
 #pragma once
 
-namespace BotLocker
+namespace BotController
 {
     // Engine weapon slots
     // Slot1 = primary

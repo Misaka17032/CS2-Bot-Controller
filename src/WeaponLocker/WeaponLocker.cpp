@@ -22,14 +22,14 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace tg = cs2bl::targets;
+namespace tg = BotController::targets;
 
 using EquipBestWeapon_t = void(__fastcall *)(void *self, char mustEquip);
 using EquipPistol_t = void(__fastcall *)(void *self, char mustEquip);
 using SelectItem_t = char(__fastcall *)(void *ws, void *weapon, int flag);
 using GetSlot_t = void *(__fastcall *)(void *ws, int slot, unsigned int mask);
 
-namespace BotLocker
+namespace BotController
 {
     namespace WeaponLockerHooks
     {
@@ -421,6 +421,12 @@ namespace BotLocker
             if (h == 0u || h == 0xFFFFFFFFu)
                 return -1;
             return static_cast<int>(h & 0x7FFFu);
+        }
+
+        // entity index of a weapon, for cmd.weaponselect on replay.
+        int WeaponEntIndex(void *weapon)
+        {
+            return EntIndexOf(weapon);
         }
 
         int ActiveWeaponDef(void *ws)

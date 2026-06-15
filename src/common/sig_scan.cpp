@@ -8,7 +8,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace BotLocker::Sig
+namespace BotController::Sig
 {
     std::string ReadFile(const std::string &path)
     {

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace BotLocker::Sig
+namespace BotController::Sig
 {
     // Read a UTF-8 file into a string. Empty on failure.
     std::string ReadFile(const std::string &path);

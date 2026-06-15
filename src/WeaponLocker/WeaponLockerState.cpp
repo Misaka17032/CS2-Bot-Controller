@@ -5,7 +5,7 @@
 #include <array>
 #include <atomic>
 
-namespace BotLocker
+namespace BotController
 {
     namespace WeaponLockerState
     {
@@ -13,13 +13,15 @@ namespace BotLocker
 
         LockTarget Get(int slot)
         {
-            if (slot < 0 || slot >= kMaxSlots) return LockTarget::None;
+            if (slot < 0 || slot >= kMaxSlots)
+                return LockTarget::None;
             return static_cast<LockTarget>(g_locks[slot].load(std::memory_order_relaxed));
         }
 
         void Set(int slot, LockTarget tgt)
         {
-            if (slot < 0 || slot >= kMaxSlots) return;
+            if (slot < 0 || slot >= kMaxSlots)
+                return;
             g_locks[slot].store(static_cast<int>(tgt), std::memory_order_relaxed);
         }
 
@@ -30,14 +32,16 @@ namespace BotLocker
 
         void ClearAll()
         {
-            for (auto &x : g_locks) x.store(0, std::memory_order_relaxed);
+            for (auto &x : g_locks)
+                x.store(0, std::memory_order_relaxed);
         }
 
         int CountLocked()
         {
             int n = 0;
             for (auto &x : g_locks)
-                if (x.load(std::memory_order_relaxed) != 0) ++n;
+                if (x.load(std::memory_order_relaxed) != 0)
+                    ++n;
             return n;
         }
     }

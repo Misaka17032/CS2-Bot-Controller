@@ -1,7 +1,7 @@
 // CCSBot Update/Upkeep/Jump detours
 
-#include "BotLocker.h"
-#include "BotLockerState.h"
+#include "BotController.h"
+#include "BotControllerState.h"
 #include "ccsbot_slot.h"
 #include "sig_scan.h"
 #include "MotionRecorder.h"
@@ -17,7 +17,7 @@
 #include <cmath>
 #include <vector>
 
-namespace tg = cs2bl::targets;
+namespace tg = BotController::targets;
 
 using Update_t = void(__fastcall *)(void *bot);
 using Upkeep_t = void(__fastcall *)(void *bot);
@@ -25,9 +25,9 @@ using Jump_t = char(__fastcall *)(void *bot, char mustJump);
 using UpdateLookAngles_t = void(__fastcall *)(void *bot);
 using SetEyeAngles_t = void(__fastcall *)(void *pawn, float *angle);
 
-namespace BotLocker
+namespace BotController
 {
-    namespace BotLockerHooks
+    namespace BotControllerHooks
     {
         static Update_t g_origUpdate = nullptr;
         static void *g_addrUpdate = nullptr;
@@ -47,7 +47,7 @@ namespace BotLocker
         {
             int slot = CCSBotToSlot(bot);
             if (slot >= 0 &&
-                (BotLockerState::GetAll(slot) || MotionRecorder::IsReplaying(slot)))
+                (BotControllerState::GetAll(slot) || MotionRecorder::IsReplaying(slot)))
             {
                 *(reinterpret_cast<uint8_t *>(bot) + tg::kBot_AiTickedFlag) = 1;
                 return;
@@ -69,7 +69,7 @@ namespace BotLocker
                 return;
             }
             if (slot >= 0 &&
-                (BotLockerState::GetAll(slot) || BotLockerState::GetAim(slot)))
+                (BotControllerState::GetAll(slot) || BotControllerState::GetAim(slot)))
             {
                 return;
             }
@@ -100,7 +100,7 @@ namespace BotLocker
         static char __fastcall HookedJump(void *bot, char mustJump)
         {
             int slot = CCSBotToSlot(bot);
-            if (slot >= 0 && BotLockerState::GetJump(slot))
+            if (slot >= 0 && BotControllerState::GetJump(slot))
                 return 0;
             return g_origJump(bot, mustJump);
         }
@@ -181,7 +181,7 @@ namespace BotLocker
             {
                 char dbg[320];
                 std::snprintf(dbg, sizeof(dbg),
-                              "[BotLocker] WARN: CCSBot::Jump sig not resolved (%s); jump-lock disabled\n",
+                              "[BotController] WARN: CCSBot::Jump sig not resolved (%s); jump-lock disabled\n",
                               jumpErr);
                 OutputDebugStringA(dbg);
             }
@@ -195,7 +195,7 @@ namespace BotLocker
             {
                 char dbg[320];
                 std::snprintf(dbg, sizeof(dbg),
-                              "[BotLocker] WARN: CCSBot::UpdateLookAngles sig not resolved (%s); replay view-drive disabled\n",
+                              "[BotController] WARN: CCSBot::UpdateLookAngles sig not resolved (%s); replay view-drive disabled\n",
                               ulaErr);
                 OutputDebugStringA(dbg);
             }
@@ -210,7 +210,7 @@ namespace BotLocker
             {
                 char dbg[320];
                 std::snprintf(dbg, sizeof(dbg),
-                              "[BotLocker] WARN: CCSPlayerPawn::SetEyeAngles sig not resolved (%s); replay 1:1 view disabled\n",
+                              "[BotController] WARN: CCSPlayerPawn::SetEyeAngles sig not resolved (%s); replay 1:1 view disabled\n",
                               seaErr);
                 OutputDebugStringA(dbg);
             }
@@ -268,7 +268,7 @@ namespace BotLocker
                 {
                     char dbg[160];
                     std::snprintf(dbg, sizeof(dbg),
-                                  "[BotLocker] WARN: MH_CreateHook CCSBot::Jump failed; jump-lock disabled\n");
+                                  "[BotController] WARN: MH_CreateHook CCSBot::Jump failed; jump-lock disabled\n");
                     OutputDebugStringA(dbg);
                     g_origJump = nullptr;
                     g_addrJump = nullptr;
@@ -277,7 +277,7 @@ namespace BotLocker
                 {
                     char dbg[160];
                     std::snprintf(dbg, sizeof(dbg),
-                                  "[BotLocker] WARN: MH_EnableHook CCSBot::Jump failed; jump-lock disabled\n");
+                                  "[BotController] WARN: MH_EnableHook CCSBot::Jump failed; jump-lock disabled\n");
                     OutputDebugStringA(dbg);
                     MH_RemoveHook(g_addrJump);
                     g_origJump = nullptr;
@@ -292,13 +292,13 @@ namespace BotLocker
                                   reinterpret_cast<void *>(&HookedUpdateLookAngles),
                                   reinterpret_cast<void **>(&g_origUpdateLookAngles)) != MH_OK)
                 {
-                    OutputDebugStringA("[BotLocker] WARN: MH_CreateHook UpdateLookAngles failed; replay view-drive disabled\n");
+                    OutputDebugStringA("[BotController] WARN: MH_CreateHook UpdateLookAngles failed; replay view-drive disabled\n");
                     g_origUpdateLookAngles = nullptr;
                     g_addrUpdateLookAngles = nullptr;
                 }
                 else if (MH_EnableHook(g_addrUpdateLookAngles) != MH_OK)
                 {
-                    OutputDebugStringA("[BotLocker] WARN: MH_EnableHook UpdateLookAngles failed; replay view-drive disabled\n");
+                    OutputDebugStringA("[BotController] WARN: MH_EnableHook UpdateLookAngles failed; replay view-drive disabled\n");
                     MH_RemoveHook(g_addrUpdateLookAngles);
                     g_origUpdateLookAngles = nullptr;
                     g_addrUpdateLookAngles = nullptr;
@@ -312,13 +312,13 @@ namespace BotLocker
                                   reinterpret_cast<void *>(&HookedSetEyeAngles),
                                   reinterpret_cast<void **>(&g_origSetEyeAngles)) != MH_OK)
                 {
-                    OutputDebugStringA("[BotLocker] WARN: MH_CreateHook SetEyeAngles failed; replay 1:1 view disabled\n");
+                    OutputDebugStringA("[BotController] WARN: MH_CreateHook SetEyeAngles failed; replay 1:1 view disabled\n");
                     g_origSetEyeAngles = nullptr;
                     g_addrSetEyeAngles = nullptr;
                 }
                 else if (MH_EnableHook(g_addrSetEyeAngles) != MH_OK)
                 {
-                    OutputDebugStringA("[BotLocker] WARN: MH_EnableHook SetEyeAngles failed; replay 1:1 view disabled\n");
+                    OutputDebugStringA("[BotController] WARN: MH_EnableHook SetEyeAngles failed; replay 1:1 view disabled\n");
                     MH_RemoveHook(g_addrSetEyeAngles);
                     g_origSetEyeAngles = nullptr;
                     g_addrSetEyeAngles = nullptr;
@@ -330,7 +330,7 @@ namespace BotLocker
 
             char dbg[400];
             std::snprintf(dbg, sizeof(dbg),
-                          "[BotLocker] CCSBot::Update hooked @ %p, "
+                          "[BotController] CCSBot::Update hooked @ %p, "
                           "CCSBot::Upkeep hooked @ %p, "
                           "CCSBot::Jump hooked @ %p, "
                           "CCSBot::UpdateLookAngles hooked @ %p\n",

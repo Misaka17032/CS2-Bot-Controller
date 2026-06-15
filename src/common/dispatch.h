@@ -6,9 +6,9 @@
 
 class IVEngineServer2;
 
-namespace BotLocker
+namespace BotController
 {
-    // Mirror BotLockerApi.LockKind on the C# side.
+    // Mirror BotControllerApi.LockKind on the C# side.
     enum class LockKind : int
     {
         All = 0,

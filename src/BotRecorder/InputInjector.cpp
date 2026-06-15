@@ -20,14 +20,14 @@
 #include <cstdio>
 #include <vector>
 
-namespace tg = cs2bl::targets;
+namespace tg = BotController::targets;
 
 using ProcessMovement_t = void(__fastcall *)(void *services, void *moveData);
 using FinishMove_t = void(__fastcall *)(void *services, void *cmd, void *moveData);
 using PlayerRunCommand_t = void(__fastcall *)(void *services, void *cmd);
 using PhysicsSimulate_t = void(__fastcall *)(void *controller);
 
-namespace BotLocker
+namespace BotController
 {
     namespace InputInjector
     {
@@ -141,7 +141,6 @@ namespace BotLocker
             g_origProcessMovement(services, moveData);
 
             // Recording: commit the tick here only when PhysicsSimulate isn't the boundary
-            // With PhysicsSimulate hooked, the post snapshot + commit happen once per server tick there, not per subtick
             if (recording && !g_physicsActive)
                 MotionRecorder::OnCapturePost(slot, services, moveData);
         }
@@ -161,14 +160,12 @@ namespace BotLocker
 
             g_origFinishMove(services, cmd, moveData);
 
-            // After original: commit moveType/flags + advance the replay cursor.
-            // With PhysicsSimulate hooked, cursor++ happens once per server tick there instead
+            // After original: commit moveType/flags + advance the replay cursor
             if (replaying && !g_physicsActive)
                 MotionRecorder::OnReplayCommit(slot, services);
         }
 
         // ---- PlayerRunCommand: subtick record + re-inject ----
-        // we only touch subtick_moves -- never move/view/buttons.
 
         static void __fastcall HookedPlayerRunCommand(void *services, void *cmd)
         {
@@ -208,12 +205,30 @@ namespace BotLocker
 
                 if (replaying)
                 {
-                    // Replace the command's subtick_moves with the recorded set
-                    // for this tick
+                    uint64_t b0 = 0, b1 = 0, b2 = 0;
+                    if (MotionRecorder::CurrentReplayInputButtons(slot, b0, b1, b2))
+                    {
+                        CInButtonStatePB *bp = base->mutable_buttons_pb();
+                        bp->set_buttonstate1(b0);
+                        bp->set_buttonstate2(b1);
+                        bp->set_buttonstate3(b2);
+                        pc->buttonstates.m_pButtonStates[0] = b0;
+                        pc->buttonstates.m_pButtonStates[1] = b1;
+                        pc->buttonstates.m_pButtonStates[2] = b2;
+                    }
+
+                    int wsel = MotionRecorder::CurrentReplayWeaponSelect(slot);
+                    if (wsel >= 0)
+                        base->set_weaponselect(wsel);
+
+                    // Replace the command's subtick_moves with the recorded set for this tick
                     SubtickMove out[MotionRecorder::kMaxSubtickPerTick];
                     int n = MotionRecorder::CurrentReplaySubticks(
                         slot, out, MotionRecorder::kMaxSubtickPerTick);
                     base->clear_subtick_moves();
+                    /* ? Throw-window diagnostic */
+                    int dbgStBtn = -1;
+                    float dbgStPressed = -1.0f, dbgStWhen = -1.0f;
                     for (int i = 0; i < n; ++i)
                     {
                         CSubtickMoveStep *m = base->add_subtick_moves();
@@ -229,6 +244,29 @@ namespace BotLocker
                             m->set_analog_forward_delta(out[i].analogForward);
                         if (out[i].analogLeft != 0.0f)
                             m->set_analog_left_delta(out[i].analogLeft);
+                        if (out[i].button & 1ull) // IN_ATTACK subtick
+                        {
+                            dbgStBtn = static_cast<int>(out[i].button);
+                            dbgStPressed = out[i].pressed;
+                            dbgStWhen = out[i].when;
+                        }
+                    }
+
+                    /* ? Throw-window diagnostic */
+                    const uint64_t kInAttack = 1ull; // IN_ATTACK bit0
+                    if (((b0 | b1 | b2) & kInAttack) || wsel >= 0 || dbgStBtn >= 0)
+                    {
+                        char dbg[256];
+                        std::snprintf(dbg, sizeof(dbg),
+                                      "[BL][rep] c=%d held=%llX prs=%llX rel=%llX "
+                                      "wsel=%d actDef=%d nSt=%d stBtn=%d stPr=%.2f stWhen=%.2f\n",
+                                      MotionRecorder::ReplayCursor(slot),
+                                      (unsigned long long)b0,
+                                      (unsigned long long)b1,
+                                      (unsigned long long)b2,
+                                      wsel, MotionRecorder::BotActiveWeaponDef(slot),
+                                      n, dbgStBtn, dbgStPressed, dbgStWhen);
+                        OutputDebugStringA(dbg);
                     }
                 }
             }
@@ -237,7 +275,7 @@ namespace BotLocker
         }
 
         // ---- PhysicsSimulate: the per-tick boundary ----
-        // Records pre/post + commits exactly one frame
+        // Records pre/post + commits
 
         static void __fastcall HookedPhysicsSimulate(void *controller)
         {
@@ -257,9 +295,7 @@ namespace BotLocker
 
             g_origPhysicsSimulate(controller);
 
-            // post: snapshot end-of-tick state + commit one frame; advance the
-            // replay cursor once. cmd=nullptr => OnCapturePost reads origin from
-            // the scene node, which now holds this tick's committed end position.
+            // post: snapshot end-of-tick state + commit one frame
             if (recording)
                 MotionRecorder::OnCapturePost(slot, services, nullptr);
             if (replaying)
@@ -308,7 +344,7 @@ namespace BotLocker
 
             char dbg[200];
             std::snprintf(dbg, sizeof(dbg),
-                          "[BotLocker] vtable hooks: FinishMove @ %p, "
+                          "[BotController] vtable hooks: FinishMove @ %p, "
                           "PlayerRunCommand @ %p (subtick=%d)\n",
                           g_addrFinishMove, g_addrPlayerRunCommand,
                           g_subtickActive ? 1 : 0);
@@ -412,7 +448,7 @@ namespace BotLocker
                 g_origPhysicsSimulate = nullptr;
                 char dbg[320];
                 std::snprintf(dbg, sizeof(dbg),
-                              "[BotLocker] WARN: PhysicsSimulate hook unavailable (%s); "
+                              "[BotController] WARN: PhysicsSimulate hook unavailable (%s); "
                               "replay falls back to per-subtick boundary (may stutter)\n",
                               psErr[0] ? psErr : "MinHook failed");
                 OutputDebugStringA(dbg);
@@ -423,7 +459,7 @@ namespace BotLocker
             g_status = "ok";
             char dbg[160];
             std::snprintf(dbg, sizeof(dbg),
-                          "[BotLocker] ProcessMovement @ %p\n", g_addrProcessMovement);
+                          "[BotController] ProcessMovement @ %p\n", g_addrProcessMovement);
             OutputDebugStringA(dbg);
             return true;
         }

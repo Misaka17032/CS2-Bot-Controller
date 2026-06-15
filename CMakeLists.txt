@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(BotLocker CXX)
+project(BotController CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(FATAL_ERROR "BotLocker requires x64 build (use -A x64).")
+    message(FATAL_ERROR "BotController requires x64 build (use -A x64).")
 endif()
 
 set(HL2SDK $ENV{HL2SDKCS2})
@@ -20,7 +20,7 @@ foreach(v HL2SDK MMS PROTO_DIR)
 endforeach()
 
 # eiface.h needs network_connection.pb.h; the usercmd protos give us
-# CSGOUserCmdPB / CSubtickMoveStep for §8 subtick record + replay.
+# CSGOUserCmdPB / CSubtickMoveStep for subtick record + replay.
 if(DEFINED ENV{PROTOC} AND EXISTS "$ENV{PROTOC}")
     set(PROTOC_EXE "$ENV{PROTOC}")
 else()
@@ -77,25 +77,29 @@ set(SDK_SOURCES
     ${MMS}/core/sourcehook/sourcehook_impl_cproto.cpp
 )
 
-add_library(BotLocker SHARED
+add_library(BotController SHARED
     src/plugin.cpp
-    src/WeaponLocker.cpp
-    src/BotLocker.cpp
-    src/InputInjector.cpp
-    src/MotionRecorder.cpp
-    src/sig_scan.cpp
-    src/WeaponLockerState.cpp
-    src/BotLockerState.cpp
-    src/ccsbot_slot.cpp
-    src/dispatch.cpp
-    src/commands.cpp
-    src/exports.cpp
+    src/WeaponLocker/WeaponLocker.cpp
+    src/WeaponLocker/WeaponLockerState.cpp
+    src/BotController/BotController.cpp
+    src/BotController/BotControllerState.cpp
+    src/BotRecorder/InputInjector.cpp
+    src/BotRecorder/MotionRecorder.cpp
+    src/common/sig_scan.cpp
+    src/common/ccsbot_slot.cpp
+    src/common/dispatch.cpp
+    src/common/commands.cpp
+    src/common/exports.cpp
     ${PROTO_SRCS}
     ${SDK_SOURCES}
 )
 
-target_include_directories(BotLocker PRIVATE
+target_include_directories(BotController PRIVATE
     src
+    src/common
+    src/WeaponLocker
+    src/BotController
+    src/BotRecorder
     ${GENERATED_DIR}
     ${HL2SDK}/thirdparty/protobuf-3.21.8/src
     ${MMS}/core ${MMS}/core/sourcehook ${MMS}/core/sourcemm
@@ -112,7 +116,7 @@ target_include_directories(BotLocker PRIVATE
 )
 
 set(HL2SDK_LIBDIR ${HL2SDK}/lib/public/win64)
-target_link_libraries(BotLocker PRIVATE
+target_link_libraries(BotController PRIVATE
     minhook psapi
     ${HL2SDK_LIBDIR}/tier0.lib
     ${HL2SDK_LIBDIR}/tier1.lib
@@ -120,9 +124,9 @@ target_link_libraries(BotLocker PRIVATE
     ${HL2SDK_LIBDIR}/interfaces.lib
     ${HL2SDK_LIBDIR}/2015/libprotobuf.lib
 )
-target_link_options(BotLocker PRIVATE /NODEFAULTLIB:LIBCMTD)
+target_link_options(BotController PRIVATE /NODEFAULTLIB:LIBCMTD)
 
-target_compile_definitions(BotLocker PRIVATE
+target_compile_definitions(BotController PRIVATE
     META_IS_SOURCE2 _CRT_SECURE_NO_WARNINGS
     WIN32 _WIN32 _WINDOWS
     COMPILER_MSVC COMPILER_MSVC64
@@ -131,9 +135,43 @@ target_compile_definitions(BotLocker PRIVATE
     GOOGLE_PROTOBUF_NO_RTTI
 )
 
-set_target_properties(BotLocker PROPERTIES OUTPUT_NAME "BotLocker" PREFIX "" SUFFIX ".dll")
+# addons package layout
+set(BC_PLATFORM_DIR win64)
+set(BC_PACKAGE_BIN_DIR "${CMAKE_BINARY_DIR}/package/addons/BotController/bin/${BC_PLATFORM_DIR}")
+set(BC_VDF_FILE "addons/BotController/bin/${BC_PLATFORM_DIR}/BotController")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/BotController.vdf.in"
+    "${CMAKE_BINARY_DIR}/BotController.vdf"
+    @ONLY
+)
+
+set_target_properties(BotController PROPERTIES
+    OUTPUT_NAME "BotController"
+    PREFIX ""
+    SUFFIX ".dll"
+    RUNTIME_OUTPUT_DIRECTORY         "${BC_PACKAGE_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BC_PACKAGE_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${BC_PACKAGE_BIN_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY         "${BC_PACKAGE_BIN_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${BC_PACKAGE_BIN_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG   "${BC_PACKAGE_BIN_DIR}"
+)
+
+# Stage vdf into addons/metamod + gamedata.json into addons/BotController
+add_custom_command(TARGET BotController POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${CMAKE_BINARY_DIR}/package/addons/metamod"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${CMAKE_BINARY_DIR}/package/addons/BotController"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_BINARY_DIR}/BotController.vdf"
+        "${CMAKE_BINARY_DIR}/package/addons/metamod/BotController.vdf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/gamedata.json"
+        "${CMAKE_BINARY_DIR}/package/addons/BotController/gamedata.json"
+)
 
 if(MSVC)
-    target_compile_options(BotLocker PRIVATE
+    target_compile_options(BotController PRIVATE
         /utf-8 /W3 /permissive- /wd4819 /wd4267 /wd4244 /wd4146 /wd4996 /wd4661)
 endif()

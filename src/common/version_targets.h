@@ -2,7 +2,7 @@
 
 #pragma once
 
-namespace cs2bl::targets
+namespace BotController::targets
 {
     // ---- CCSBot ----
 
@@ -19,8 +19,13 @@ namespace cs2bl::targets
     inline constexpr int kEntIdentity_EHandle = 0x10;
     // m_MoveType (MoveType_t, 1 byte) — restored each replay tick for §8
     inline constexpr int kEnt_MoveType = 0x2F3;
-    // m_fFlags (bit0 = FL_ONGROUND)
+    // m_nActualMoveType (MoveType_t, 1 byte) — networked move type (ladder anim)
+    inline constexpr int kEnt_ActualMoveType = 0x2F5;
+    // m_fFlags (bit0 = FL_ONGROUND, bit1 = FL_DUCKING)
     inline constexpr int kEnt_Flags = 0x388;
+    // m_fFlags bit masks restored on replay
+    inline constexpr unsigned kFL_OnGround = 1u << 0;
+    inline constexpr unsigned kFL_Ducking = 1u << 1;
     // m_vecAbsVelocity
     inline constexpr int kEnt_AbsVelocity = 0x38C;
     // entity -> m_pGameSceneNode -> m_vecAbsOrigin (world pos), written each
@@ -56,15 +61,24 @@ namespace cs2bl::targets
 
     // m_pawn (CCSPlayerPawn*)
     inline constexpr int kServices_Pawn = 56;
-    // m_nButtons button mask
-    inline constexpr int kServices_Buttons = 88;
+    // m_nButtons.m_pButtonStates[0..2] — engine button state block (CInButtonState)
+    inline constexpr int kServices_Buttons = 88;       // states[0] (pressed)
+    inline constexpr int kServices_Buttons1 = 88 + 8;  // states[1]
+    inline constexpr int kServices_Buttons2 = 88 + 16; // states[2]
 
-    // ---- CMoveData (mover working copy, a2 in WalkMove/AirMove) ----
+    // duck/ladder state
+    inline constexpr int kServices_LadderNormal = 0x3F8; // Vector m_vecLadderNormal
+    inline constexpr int kServices_Ducked = 0x408;       // bool m_bDucked
+    inline constexpr int kServices_DuckAmount = 0x40C;   // float m_flDuckAmount
+    inline constexpr int kServices_DuckSpeed = 0x410;    // float m_flDuckSpeed
+    inline constexpr int kServices_DesiresDuck = 0x415;  // bool m_bDesiresDuck
+    inline constexpr int kServices_Ducking = 0x416;      // bool m_bDucking
+
+    // ---- CMoveData  ----
 
     // m_vecVelocity — the velocity TryPlayerMove integrates into origin
     inline constexpr int kMove_Velocity = 56;
     // m_vecAbsOrigin — post-move origin written here before FinishMove commits
-    // it to the entity (§8). SDK struct offset, re-verify on engine update.
     inline constexpr int kMove_AbsOrigin = 200;
 
     // ---- CUserCmd ----

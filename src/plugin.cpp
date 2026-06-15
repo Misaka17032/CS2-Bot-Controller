@@ -1,4 +1,4 @@
-// BotLocker native Metamod:Source plugin entry point.
+// BotController native Metamod:Source plugin entry point.
 
 #include <ISmmPlugin.h>
 
@@ -13,15 +13,15 @@
 #include <interfaces/interfaces.h>
 
 #include "WeaponLocker.h"
-#include "BotLocker.h"
+#include "BotController.h"
 #include "InputInjector.h"
 #include "MotionRecorder.h"
 #include "dispatch.h"
 #include "WeaponLockerState.h"
-#include "BotLockerState.h"
+#include "BotControllerState.h"
 #include "commands.h"
 
-class BotLockerPlugin : public ISmmPlugin
+class BotControllerPlugin : public ISmmPlugin
 {
 public:
     bool Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late) override;
@@ -32,17 +32,17 @@ public:
     void AllPluginsLoaded() override {}
 
     const char *GetAuthor() override { return "XBribo(๑•.•๑)"; }
-    const char *GetName() override { return "BotLocker"; }
+    const char *GetName() override { return "BotController"; }
     const char *GetDescription() override { return "Lock and Record CS2 bots."; }
     const char *GetURL() override { return ""; }
     const char *GetLicense() override { return "GPLv3"; }
-    const char *GetVersion() override { return "0.5.0"; }
+    const char *GetVersion() override { return "0.4.4"; }
     const char *GetDate() override { return __DATE__; }
     const char *GetLogTag() override { return "BL"; }
 };
 
-BotLockerPlugin g_botLockerPlugin;
-PLUGIN_EXPOSE(BotLockerPlugin, g_botLockerPlugin);
+BotControllerPlugin g_BotControllerPlugin;
+PLUGIN_EXPOSE(BotControllerPlugin, g_BotControllerPlugin);
 
 static HMODULE GetSelfModule()
 {
@@ -73,8 +73,8 @@ static std::string ComputeGamedataPath()
     return result;
 }
 
-bool BotLockerPlugin::Load(PluginId id, ISmmAPI *ismm,
-                           char *error, size_t maxlen, bool /*late*/)
+bool BotControllerPlugin::Load(PluginId id, ISmmAPI *ismm,
+                               char *error, size_t maxlen, bool /*late*/)
 {
     PLUGIN_SAVEVARS();
 
@@ -90,9 +90,9 @@ bool BotLockerPlugin::Load(PluginId id, ISmmAPI *ismm,
     ConVar_Register(FCVAR_RELEASE | FCVAR_GAMEDLL);
 
     // IVEngineServer2::ClientCommand
-    BotLocker::Dispatch::g_pEngine = static_cast<IVEngineServer2 *>(
+    BotController::Dispatch::g_pEngine = static_cast<IVEngineServer2 *>(
         ismm->GetEngineFactory()(INTERFACEVERSION_VENGINESERVER, nullptr));
-    if (!BotLocker::Dispatch::g_pEngine)
+    if (!BotController::Dispatch::g_pEngine)
     {
         std::snprintf(error, maxlen,
                       "Failed to get IVEngineServer2 (%s)",
@@ -112,7 +112,7 @@ bool BotLockerPlugin::Load(PluginId id, ISmmAPI *ismm,
     }
 
     // Engine interface used by console command output (ClientPrintf).
-    BotLocker::Commands::g_pEngine = BotLocker::Dispatch::g_pEngine;
+    BotController::Commands::g_pEngine = BotController::Dispatch::g_pEngine;
 
     std::string gamedataPath = ComputeGamedataPath();
     if (gamedataPath.empty())
@@ -121,49 +121,48 @@ bool BotLockerPlugin::Load(PluginId id, ISmmAPI *ismm,
         return false;
     }
 
-    if (!BotLocker::WeaponLockerHooks::Install(gamedataPath, serverIface,
-                                               error, maxlen))
+    if (!BotController::WeaponLockerHooks::Install(gamedataPath, serverIface,
+                                                   error, maxlen))
         return false;
 
-    if (!BotLocker::BotLockerHooks::Install(gamedataPath, serverIface,
-                                            error, maxlen))
+    if (!BotController::BotControllerHooks::Install(gamedataPath, serverIface,
+                                                    error, maxlen))
     {
-        BotLocker::WeaponLockerHooks::Remove();
+        BotController::WeaponLockerHooks::Remove();
         return false;
     }
 
-    // ProcessUsercmd hook for demo-replay UserCmd injection. Optional: a sig
-    // miss only kills replay injection, not the lock hooks above.
+    // ProcessUsercmd hook for demo-replay UserCmd injection
     char injErr[256] = {0};
-    if (!BotLocker::InputInjector::Install(gamedataPath, serverIface,
-                                           injErr, sizeof(injErr)))
+    if (!BotController::InputInjector::Install(gamedataPath, serverIface,
+                                               injErr, sizeof(injErr)))
     {
         char dbg[320];
         std::snprintf(dbg, sizeof(dbg),
-                      "[BotLocker] WARN: InputInjector::Install failed (%s); "
-                      "BotLocker_InjectUserCmd will be a no-op\n",
+                      "[BotController] WARN: InputInjector::Install failed (%s); "
+                      "BotController_InjectUserCmd will be a no-op\n",
                       injErr);
         OutputDebugStringA(dbg);
     }
 
-    OutputDebugStringA("[BotLocker] plugin loaded successfully\n");
+    OutputDebugStringA("[BotController] plugin loaded successfully\n");
     return true;
 }
 
-bool BotLockerPlugin::Unload(char * /*error*/, size_t /*maxlen*/)
+bool BotControllerPlugin::Unload(char * /*error*/, size_t /*maxlen*/)
 {
-    BotLocker::MotionRecorder::ClearAll();
-    BotLocker::InputInjector::Remove();
-    BotLocker::BotLockerHooks::Remove();
-    BotLocker::WeaponLockerHooks::Remove();
-    BotLocker::WeaponLockerState::ClearAll();
-    BotLocker::BotLockerState::ClearAllAll();
-    BotLocker::BotLockerState::ClearAllAim();
-    BotLocker::BotLockerState::ClearAllJump();
-    BotLocker::Dispatch::g_pEngine = nullptr;
-    BotLocker::Commands::g_pEngine = nullptr;
+    BotController::MotionRecorder::ClearAll();
+    BotController::InputInjector::Remove();
+    BotController::BotControllerHooks::Remove();
+    BotController::WeaponLockerHooks::Remove();
+    BotController::WeaponLockerState::ClearAll();
+    BotController::BotControllerState::ClearAllAll();
+    BotController::BotControllerState::ClearAllAim();
+    BotController::BotControllerState::ClearAllJump();
+    BotController::Dispatch::g_pEngine = nullptr;
+    BotController::Commands::g_pEngine = nullptr;
     ConVar_Unregister();
     g_pCVar = nullptr;
-    OutputDebugStringA("[BotLocker] plugin unloaded\n");
+    OutputDebugStringA("[BotController] plugin unloaded\n");
     return true;
 }

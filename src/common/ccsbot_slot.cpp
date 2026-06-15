@@ -9,9 +9,9 @@
 
 #include <tier0/dbg.h>
 
-namespace tg = cs2bl::targets;
+namespace tg = BotController::targets;
 
-namespace BotLocker
+namespace BotController
 {
     // Compile-time switch to turn the once-per-bot diagnostic scan back on.
     static constexpr bool kEnableHandleScan = false;

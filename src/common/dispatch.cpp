@@ -3,12 +3,12 @@
 #include "dispatch.h"
 #include "WeaponLockerState.h"
 #include "WeaponLocker.h"
-#include "BotLockerState.h"
+#include "BotControllerState.h"
 
 #include <eiface.h>
 #include <playerslot.h>
 
-namespace BotLocker
+namespace BotController
 {
     namespace Dispatch
     {
@@ -20,15 +20,15 @@ namespace BotLocker
             switch (kind)
             {
             case LockKind::All:
-                if (slot < 0 || slot >= BotLockerState::kMaxSlots)
+                if (slot < 0 || slot >= BotControllerState::kMaxSlots)
                     return -2;
-                BotLockerState::SetAll(slot, true);
+                BotControllerState::SetAll(slot, true);
                 return 0;
 
             case LockKind::Aim:
-                if (slot < 0 || slot >= BotLockerState::kMaxSlots)
+                if (slot < 0 || slot >= BotControllerState::kMaxSlots)
                     return -2;
-                BotLockerState::SetAim(slot, true);
+                BotControllerState::SetAim(slot, true);
                 return 0;
 
             case LockKind::Weapon:
@@ -44,9 +44,9 @@ namespace BotLocker
             }
 
             case LockKind::Jump:
-                if (slot < 0 || slot >= BotLockerState::kMaxSlots)
+                if (slot < 0 || slot >= BotControllerState::kMaxSlots)
                     return -2;
-                BotLockerState::SetJump(slot, true);
+                BotControllerState::SetJump(slot, true);
                 return 0;
             }
             return -2;
@@ -58,15 +58,15 @@ namespace BotLocker
             switch (kind)
             {
             case LockKind::All:
-                if (slot < 0 || slot >= BotLockerState::kMaxSlots)
+                if (slot < 0 || slot >= BotControllerState::kMaxSlots)
                     return -2;
-                BotLockerState::SetAll(slot, false);
+                BotControllerState::SetAll(slot, false);
                 return 0;
 
             case LockKind::Aim:
-                if (slot < 0 || slot >= BotLockerState::kMaxSlots)
+                if (slot < 0 || slot >= BotControllerState::kMaxSlots)
                     return -2;
-                BotLockerState::SetAim(slot, false);
+                BotControllerState::SetAim(slot, false);
                 return 0;
 
             case LockKind::Weapon:
@@ -76,9 +76,9 @@ namespace BotLocker
                 return 0;
 
             case LockKind::Jump:
-                if (slot < 0 || slot >= BotLockerState::kMaxSlots)
+                if (slot < 0 || slot >= BotControllerState::kMaxSlots)
                     return -2;
-                BotLockerState::SetJump(slot, false);
+                BotControllerState::SetJump(slot, false);
                 return 0;
             }
             return -2;
@@ -90,16 +90,16 @@ namespace BotLocker
             switch (kind)
             {
             case LockKind::All:
-                BotLockerState::ClearAllAll();
+                BotControllerState::ClearAllAll();
                 return 0;
             case LockKind::Aim:
-                BotLockerState::ClearAllAim();
+                BotControllerState::ClearAllAim();
                 return 0;
             case LockKind::Weapon:
                 WeaponLockerState::ClearAll();
                 return 0;
             case LockKind::Jump:
-                BotLockerState::ClearAllJump();
+                BotControllerState::ClearAllJump();
                 return 0;
             }
             return -2;
@@ -111,13 +111,13 @@ namespace BotLocker
             switch (kind)
             {
             case LockKind::All:
-                return BotLockerState::GetAll(slot) ? 1 : 0;
+                return BotControllerState::GetAll(slot) ? 1 : 0;
             case LockKind::Aim:
-                return BotLockerState::GetAim(slot) ? 1 : 0;
+                return BotControllerState::GetAim(slot) ? 1 : 0;
             case LockKind::Weapon:
                 return static_cast<int>(WeaponLockerState::Get(slot));
             case LockKind::Jump:
-                return BotLockerState::GetJump(slot) ? 1 : 0;
+                return BotControllerState::GetJump(slot) ? 1 : 0;
             }
             return 0;
         }

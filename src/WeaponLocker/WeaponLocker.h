@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace BotLocker
+namespace BotController
 {
     namespace WeaponLockerHooks
     {
@@ -35,6 +35,10 @@ namespace BotLocker
 
         // Read a weapon's item-definition index (weapon+0x9E0). -1 if null.
         int ReadDefIndex(void *weapon);
+
+        // Entity index of a weapon (identity ehandle low bits). -1 if null.
+        // For writing cmd.weaponselect on replay (engine-native switch path).
+        int WeaponEntIndex(void *weapon);
 
         // Active weapon's def index for a WeaponServices*, matched by entity
         // handle against GetSlot(0..4). -1 if none/unresolved (no false match).
