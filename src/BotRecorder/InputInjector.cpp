@@ -10,9 +10,8 @@
 #include "sig_scan.h"
 #include "MotionRecorder.h"
 #include "version_targets.h"
-
-#include <Windows.h>
-#include <MinHook.h>
+#include "hook.h"
+#include "platform.h"
 
 #include <array>
 #include <atomic>
@@ -22,23 +21,15 @@
 
 namespace tg = BotController::targets;
 
-using ProcessMovement_t = void(__fastcall *)(void *services, void *moveData);
-using FinishMove_t = void(__fastcall *)(void *services, void *cmd, void *moveData);
-using PlayerRunCommand_t = void(__fastcall *)(void *services, void *cmd);
-using PhysicsSimulate_t = void(__fastcall *)(void *controller);
+using ProcessMovement_t = void(BC_FASTCALL *)(void *services, void *moveData);
+using FinishMove_t = void(BC_FASTCALL *)(void *services, void *cmd, void *moveData);
+using PlayerRunCommand_t = void(BC_FASTCALL *)(void *services, void *cmd);
+using PhysicsSimulate_t = void(BC_FASTCALL *)(void *controller);
 
 namespace BotController
 {
     namespace InputInjector
     {
-        struct SlotState
-        {
-            std::atomic<bool> active{false};
-            InjectedInput input{};
-        };
-
-        static std::array<SlotState, kMaxSlots> g_slots;
-
         static ProcessMovement_t g_origProcessMovement = nullptr;
         static FinishMove_t g_origFinishMove = nullptr;
         static PlayerRunCommand_t g_origPlayerRunCommand = nullptr;
@@ -48,6 +39,11 @@ namespace BotController
         static void *g_addrFinishMove = nullptr;
         static void *g_addrPlayerRunCommand = nullptr;
         static void *g_addrPhysicsSimulate = nullptr;
+
+        static Hook g_hookProcessMovement;
+        static Hook g_hookFinishMove;
+        static Hook g_hookPlayerRunCommand;
+        static Hook g_hookPhysicsSimulate;
         static bool g_installed = false;
         // True once PhysicsSimulate is hooked
         static bool g_physicsActive = false;
@@ -86,12 +82,12 @@ namespace BotController
                 reinterpret_cast<char *>(pawn) + tg::kPawn_WeaponServices);
         }
 
-        // ---- ProcessMovement: record pre/post + manual inject + replay pre ----
+        // ---- ProcessMovement: record pre/post + replay pre ----
 
         // Defined after HookedFinishMove
         static void EnsureVtableHooks(void *services);
 
-        static void __fastcall HookedProcessMovement(void *services, void *moveData)
+        static void BC_FASTCALL HookedProcessMovement(void *services, void *moveData)
         {
             g_hookCalls.fetch_add(1, std::memory_order_relaxed);
             int slot = ServicesToSlot(services);
@@ -121,23 +117,6 @@ namespace BotController
             if (replaying)
                 MotionRecorder::OnReplayPre(slot, services, moveData);
 
-            // Manual inject (bl_inject): override the
-            // MoveData move fields for this tick.
-            if (slot >= 0 && slot < kMaxSlots &&
-                g_slots[slot].active.load(std::memory_order_acquire))
-            {
-                const InjectedInput &p = g_slots[slot].input;
-                auto *s = reinterpret_cast<char *>(services);
-                *reinterpret_cast<uint64_t *>(s + tg::kServices_Buttons) = p.buttons;
-                if (moveData)
-                {
-                    auto *c = reinterpret_cast<char *>(moveData);
-                    *reinterpret_cast<float *>(c + tg::kCmd_ForwardMove) = p.forwardMove;
-                    *reinterpret_cast<float *>(c + tg::kCmd_SideMove) = p.sideMove;
-                    *reinterpret_cast<float *>(c + tg::kCmd_UpMove) = p.upMove;
-                }
-            }
-
             g_origProcessMovement(services, moveData);
 
             // Recording: commit the tick here only when PhysicsSimulate isn't the boundary
@@ -147,7 +126,7 @@ namespace BotController
 
         // ---- FinishMove: replay post-write + commit ----
 
-        static void __fastcall HookedFinishMove(void *services, void *cmd,
+        static void BC_FASTCALL HookedFinishMove(void *services, void *cmd,
                                                 void *moveData)
         {
             int slot = ServicesToSlot(services);
@@ -167,7 +146,7 @@ namespace BotController
 
         // ---- PlayerRunCommand: subtick record + re-inject ----
 
-        static void __fastcall HookedPlayerRunCommand(void *services, void *cmd)
+        static void BC_FASTCALL HookedPlayerRunCommand(void *services, void *cmd)
         {
             int slot = ServicesToSlot(services);
             bool recording = slot >= 0 && slot < kMaxSlots &&
@@ -266,7 +245,7 @@ namespace BotController
                                       (unsigned long long)b2,
                                       wsel, MotionRecorder::BotActiveWeaponDef(slot),
                                       n, dbgStBtn, dbgStPressed, dbgStWhen);
-                        OutputDebugStringA(dbg);
+                        DebugOut(dbg);
                     }
                 }
             }
@@ -277,7 +256,7 @@ namespace BotController
         // ---- PhysicsSimulate: the per-tick boundary ----
         // Records pre/post + commits
 
-        static void __fastcall HookedPhysicsSimulate(void *controller)
+        static void BC_FASTCALL HookedPhysicsSimulate(void *controller)
         {
             int slot = ControllerToSlot(controller);
             void *services = (slot >= 0 && slot < kMaxSlots)
@@ -302,10 +281,6 @@ namespace BotController
                 MotionRecorder::OnReplayCommit(slot, services);
         }
 
-        // CCSPlayer_MovementServices vtable indices (Windows)
-        static constexpr int kVtIdx_PlayerRunCommand = 22;
-        static constexpr int kVtIdx_FinishMove = 35;
-
         static std::atomic<bool> g_vtHooksTried{false};
 
         static void EnsureVtableHooks(void *services)
@@ -318,26 +293,26 @@ namespace BotController
             if (!vt)
                 return;
 
-            g_addrFinishMove = vt[kVtIdx_FinishMove];
+            g_addrFinishMove = vt[tg::kVtIdx_FinishMove];
             if (g_addrFinishMove &&
-                MH_CreateHook(g_addrFinishMove,
-                              reinterpret_cast<void *>(&HookedFinishMove),
-                              reinterpret_cast<void **>(&g_origFinishMove)) == MH_OK)
-                MH_EnableHook(g_addrFinishMove);
+                g_hookFinishMove.Create(g_addrFinishMove,
+                                        reinterpret_cast<void *>(&HookedFinishMove),
+                                        reinterpret_cast<void **>(&g_origFinishMove)))
+                g_hookFinishMove.Enable();
 
             // PlayerRunCommand (subtick record/re-inject)
-            g_addrPlayerRunCommand = vt[kVtIdx_PlayerRunCommand];
+            g_addrPlayerRunCommand = vt[tg::kVtIdx_PlayerRunCommand];
             if (g_addrPlayerRunCommand &&
-                MH_CreateHook(g_addrPlayerRunCommand,
-                              reinterpret_cast<void *>(&HookedPlayerRunCommand),
-                              reinterpret_cast<void **>(&g_origPlayerRunCommand)) == MH_OK &&
-                MH_EnableHook(g_addrPlayerRunCommand) == MH_OK)
+                g_hookPlayerRunCommand.Create(g_addrPlayerRunCommand,
+                                              reinterpret_cast<void *>(&HookedPlayerRunCommand),
+                                              reinterpret_cast<void **>(&g_origPlayerRunCommand)) &&
+                g_hookPlayerRunCommand.Enable())
             {
                 g_subtickActive = true;
             }
             else if (g_addrPlayerRunCommand)
             {
-                MH_RemoveHook(g_addrPlayerRunCommand);
+                g_hookPlayerRunCommand.Remove();
                 g_addrPlayerRunCommand = nullptr;
                 g_origPlayerRunCommand = nullptr;
             }
@@ -348,59 +323,13 @@ namespace BotController
                           "PlayerRunCommand @ %p (subtick=%d)\n",
                           g_addrFinishMove, g_addrPlayerRunCommand,
                           g_subtickActive ? 1 : 0);
-            OutputDebugStringA(dbg);
+            DebugOut(dbg);
         }
 
-        static void *ResolveSig(const std::string &gd, HMODULE serverModule,
-                                const char *name,
-                                char *errorOut, size_t errorOutLen)
-        {
-            std::string sig = Sig::FindWindowsSig(gd, name);
-            if (sig.empty())
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "gamedata missing '%s.signatures.windows'", name);
-                return nullptr;
-            }
-            std::vector<uint8_t> bytes;
-            std::vector<bool> wild;
-            if (!Sig::ParseSigString(sig, bytes, wild))
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "failed to parse '%s' sig: '%s'", name, sig.c_str());
-                return nullptr;
-            }
-            void *addr = Sig::FindPatternIn(serverModule, bytes, wild);
-            if (!addr)
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "sig '%s' not found in server.dll", name);
-                return nullptr;
-            }
-            return addr;
-        }
-
-        bool Install(const std::string &gamedataPath, void *serverIface,
+        bool Install(const nlohmann::json &gd, const Sig::ModuleInfo &serverModule,
                      char *errorOut, size_t errorOutLen)
         {
-            HMODULE serverModule = Sig::ModuleFromInterfacePtr(serverIface);
-            if (!serverModule)
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "ModuleFromInterfacePtr returned null");
-                g_status = "failed: no server module";
-                return false;
-            }
-            std::string gd = Sig::ReadFile(gamedataPath);
-            if (gd.empty())
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "failed to read gamedata: %s", gamedataPath.c_str());
-                g_status = "failed: gamedata missing";
-                return false;
-            }
-
-            g_addrProcessMovement = ResolveSig(
+            g_addrProcessMovement = Sig::ResolveSig(
                 gd, serverModule, "CCSPlayer_MovementServices::ProcessMovement",
                 errorOut, errorOutLen);
             if (!g_addrProcessMovement)
@@ -408,33 +337,28 @@ namespace BotController
                 g_status = "failed: ProcessMovement sig";
                 return false;
             }
-            if (MH_CreateHook(g_addrProcessMovement,
-                              reinterpret_cast<void *>(&HookedProcessMovement),
-                              reinterpret_cast<void **>(&g_origProcessMovement)) != MH_OK)
+            if (!g_hookProcessMovement.Create(g_addrProcessMovement,
+                                              reinterpret_cast<void *>(&HookedProcessMovement),
+                                              reinterpret_cast<void **>(&g_origProcessMovement)) ||
+                !g_hookProcessMovement.Enable())
             {
-                std::snprintf(errorOut, errorOutLen, "MH_CreateHook ProcessMovement failed");
-                g_status = "failed: MH_CreateHook";
-                return false;
-            }
-            if (MH_EnableHook(g_addrProcessMovement) != MH_OK)
-            {
-                std::snprintf(errorOut, errorOutLen, "MH_EnableHook ProcessMovement failed");
-                MH_RemoveHook(g_addrProcessMovement);
+                std::snprintf(errorOut, errorOutLen, "hook ProcessMovement failed");
+                g_hookProcessMovement.Remove();
                 g_origProcessMovement = nullptr;
-                g_status = "failed: MH_EnableHook";
+                g_status = "failed: hook ProcessMovement";
                 return false;
             }
 
             // PhysicsSimulate: the per-tick boundary
             char psErr[256] = {0};
-            g_addrPhysicsSimulate = ResolveSig(
+            g_addrPhysicsSimulate = Sig::ResolveSig(
                 gd, serverModule, "CCSPlayer_MovementServices::PhysicsSimulate",
                 psErr, sizeof(psErr));
             if (g_addrPhysicsSimulate &&
-                MH_CreateHook(g_addrPhysicsSimulate,
-                              reinterpret_cast<void *>(&HookedPhysicsSimulate),
-                              reinterpret_cast<void **>(&g_origPhysicsSimulate)) == MH_OK &&
-                MH_EnableHook(g_addrPhysicsSimulate) == MH_OK)
+                g_hookPhysicsSimulate.Create(g_addrPhysicsSimulate,
+                                             reinterpret_cast<void *>(&HookedPhysicsSimulate),
+                                             reinterpret_cast<void **>(&g_origPhysicsSimulate)) &&
+                g_hookPhysicsSimulate.Enable())
             {
                 g_physicsActive = true;
             }
@@ -442,7 +366,7 @@ namespace BotController
             {
                 if (g_addrPhysicsSimulate)
                 {
-                    MH_RemoveHook(g_addrPhysicsSimulate);
+                    g_hookPhysicsSimulate.Remove();
                     g_addrPhysicsSimulate = nullptr;
                 }
                 g_origPhysicsSimulate = nullptr;
@@ -450,8 +374,8 @@ namespace BotController
                 std::snprintf(dbg, sizeof(dbg),
                               "[BotController] WARN: PhysicsSimulate hook unavailable (%s); "
                               "replay falls back to per-subtick boundary (may stutter)\n",
-                              psErr[0] ? psErr : "MinHook failed");
-                OutputDebugStringA(dbg);
+                              psErr[0] ? psErr : "funchook failed");
+                DebugOut(dbg);
             }
 
             // FinishMove is hooked lazily from the live vtable on the first ProcessMovement tick.
@@ -460,7 +384,7 @@ namespace BotController
             char dbg[160];
             std::snprintf(dbg, sizeof(dbg),
                           "[BotController] ProcessMovement @ %p\n", g_addrProcessMovement);
-            OutputDebugStringA(dbg);
+            DebugOut(dbg);
             return true;
         }
 
@@ -468,23 +392,10 @@ namespace BotController
         {
             if (!g_installed)
                 return;
-            MH_DisableHook(g_addrProcessMovement);
-            MH_RemoveHook(g_addrProcessMovement);
-            if (g_addrFinishMove)
-            {
-                MH_DisableHook(g_addrFinishMove);
-                MH_RemoveHook(g_addrFinishMove);
-            }
-            if (g_addrPlayerRunCommand)
-            {
-                MH_DisableHook(g_addrPlayerRunCommand);
-                MH_RemoveHook(g_addrPlayerRunCommand);
-            }
-            if (g_addrPhysicsSimulate)
-            {
-                MH_DisableHook(g_addrPhysicsSimulate);
-                MH_RemoveHook(g_addrPhysicsSimulate);
-            }
+            g_hookProcessMovement.Remove();
+            g_hookFinishMove.Remove();
+            g_hookPlayerRunCommand.Remove();
+            g_hookPhysicsSimulate.Remove();
             g_origProcessMovement = nullptr;
             g_origFinishMove = nullptr;
             g_origPlayerRunCommand = nullptr;
@@ -500,51 +411,11 @@ namespace BotController
                 s.store(nullptr, std::memory_order_release);
             g_installed = false;
             g_status = "not_attempted";
-            ClearAll();
         }
 
         const char *Status() { return g_status.c_str(); }
 
         void *ProcessUsercmdAddress() { return g_addrProcessMovement; }
-
-        bool SetInput(int slot, const InjectedInput &input)
-        {
-            if (slot < 0 || slot >= kMaxSlots)
-                return false;
-            g_slots[slot].input = input;
-            g_slots[slot].active.store(true, std::memory_order_release);
-            return true;
-        }
-
-        bool ClearInput(int slot)
-        {
-            if (slot < 0 || slot >= kMaxSlots)
-                return false;
-            g_slots[slot].active.store(false, std::memory_order_release);
-            return true;
-        }
-
-        void ClearAll()
-        {
-            for (auto &s : g_slots)
-                s.active.store(false, std::memory_order_release);
-        }
-
-        bool IsActive(int slot)
-        {
-            if (slot < 0 || slot >= kMaxSlots)
-                return false;
-            return g_slots[slot].active.load(std::memory_order_acquire);
-        }
-
-        int CountActive()
-        {
-            int n = 0;
-            for (auto &s : g_slots)
-                if (s.active.load(std::memory_order_acquire))
-                    ++n;
-            return n;
-        }
 
         uint64_t HookCallCount() { return g_hookCalls.load(std::memory_order_relaxed); }
         int LastResolvedSlot() { return g_lastSlot.load(std::memory_order_relaxed); }

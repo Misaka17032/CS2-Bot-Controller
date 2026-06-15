@@ -1,7 +1,6 @@
 // C-ABI exports for CounterStrikeSharp P/Invoke. quiet=true on all entries.
 
 #include "dispatch.h"
-#include "InputInjector.h"
 #include "MotionRecorder.h"
 
 #include <cstdint>
@@ -29,32 +28,6 @@ extern "C" __declspec(dllexport) int BotController_IsLocked(int slot, int kind)
 {
     return BotController::Dispatch::IsLocked(slot,
                                              static_cast<BotController::LockKind>(kind));
-}
-
-// Set per-slot injected input. Engine pmove runs with these values until cleared.
-extern "C" __declspec(dllexport) int BotController_InjectUserCmd(int slot,
-                                                             uint64_t buttons,
-                                                             float forwardMove,
-                                                             float sideMove,
-                                                             float upMove,
-                                                             float pitch,
-                                                             float yaw)
-{
-    BotController::InjectedInput in{buttons, forwardMove, sideMove, upMove, pitch, yaw};
-    return BotController::InputInjector::SetInput(slot, in) ? 0 : -1;
-}
-
-// Stop injecting for one slot. Engine resumes its own UserCmd.
-extern "C" __declspec(dllexport) int BotController_ClearInjection(int slot)
-{
-    return BotController::InputInjector::ClearInput(slot) ? 0 : -1;
-}
-
-// Stop injecting for every slot at once.
-extern "C" __declspec(dllexport) int BotController_ClearAllInjections()
-{
-    BotController::InputInjector::ClearAll();
-    return 0;
 }
 
 extern "C" __declspec(dllexport) int BotController_GetVersion()

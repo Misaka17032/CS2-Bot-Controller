@@ -320,14 +320,4 @@ CON_COMMAND_F(bc_status,
                                         s, Commands::TargetName(t));
         }
     }
-
-    // Input injection
-    int nInj = InputInjector::CountActive();
-    Commands::PrintToCaller(context, "[BC] inject-active count: %d\n", nInj);
-    if (nInj > 0)
-    {
-        for (int s = 0; s < InputInjector::kMaxSlots; ++s)
-            if (InputInjector::IsActive(s))
-                Commands::PrintToCaller(context, "[BC]   inject slot %2d\n", s);
-    }
 }

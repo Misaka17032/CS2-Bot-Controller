@@ -4,13 +4,15 @@
 
 #include <string>
 
+#include <nlohmann/json.hpp>
+#include "sig_scan.h"
+
 namespace BotController
 {
     namespace BotControllerHooks
     {
         // Resolve sigs and install detours.
-        bool Install(const std::string &gamedataPath,
-                     void *serverIface,
+        bool Install(const nlohmann::json &gd, const Sig::ModuleInfo &serverModule,
                      char *errorOut, size_t errorOutLen);
 
         // Disable + remove detours.

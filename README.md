@@ -1,5 +1,9 @@
 # CS2-Bot-Controller
 
+**Make Bot Mimic Again**
+
+## Your stars⭐ are my motivation to keep updating
+
 CS2-Bot-Controller is a Metamod:Source plugin for Counter-Strike 2 that can lock Bot's Weapon/Aim/Jump/All
 It can be installed on win64 clients.
 
@@ -7,10 +11,6 @@ It can be installed on win64 clients.
 - **Aim** — freeze `CCSBot::Upkeep`; view holds still, AI keeps deciding/moving.
 - **Jump** — block `CCSBot::Jump`; bot stops jumping, move/fire/aim unaffected.
 - **All** — freeze both `CCSBot::Update` and `CCSBot::Upkeep`.
-
-## Your stars⭐ are my motivation to keep updating
-
-**Version**: 0.4.3 · **ABI**: 10
 
 ------------------------------------------------------------------------
 

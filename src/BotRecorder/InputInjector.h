@@ -1,54 +1,31 @@
-// MinHook for CS2 movement functions (ProcessMovement / PhysicsSimulate / FinishMove / PlayerRunCommand)
+// funchook for CS2 movement functions (ProcessMovement / PhysicsSimulate / FinishMove / PlayerRunCommand)
 
 #pragma once
 
 #include <cstdint>
 #include <string>
 
+#include <nlohmann/json.hpp>
+#include "sig_scan.h"
+
 namespace BotController
 {
-    // Injected input applied for one slot until ClearInput.
-    struct InjectedInput
-    {
-        uint64_t buttons;  // m_nButtonDownMaskPrev bitmask
-        float forwardMove; // -1..+1, engine scales by maxspeed
-        float sideMove;    // -1..+1
-        float upMove;      // -1..+1
-        float pitch;       // viewangle x
-        float yaw;         // viewangle y
-    };
-
     namespace InputInjector
     {
-        // Max bots we track per-slot input for.
+        // Max bots we track per-slot state for.
         static constexpr int kMaxSlots = 64;
 
-        // Resolve sig and install the ProcessUsercmd hook.
-        bool Install(const std::string &gamedataPath,
-                     void *serverIface,
+        // Resolve sigs and install the movement hooks.
+        bool Install(const nlohmann::json &gd, const Sig::ModuleInfo &serverModule,
                      char *errorOut, size_t errorOutLen);
 
-        // Disable + remove the hook; also wipes all per-slot inputs.
+        // Disable + remove the hooks.
         void Remove();
 
         const char *Status();
 
         // Resolved address of the hooked function.
         void *ProcessUsercmdAddress();
-
-        // Set the input applied each tick for this slot. Persists until ClearInput.
-        // Returns false if slot is out of range.
-        bool SetInput(int slot, const InjectedInput &input);
-
-        // Stop injecting for this slot. Engine resumes its own input.
-        bool ClearInput(int slot);
-
-        // Stop injecting for every slot.
-        void ClearAll();
-
-        // bl_status queries.
-        bool IsActive(int slot);
-        int CountActive();
 
         // Diagnostics
         uint64_t HookCallCount();

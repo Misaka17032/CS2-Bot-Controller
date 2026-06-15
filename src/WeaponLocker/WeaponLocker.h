@@ -4,6 +4,9 @@
 
 #include <string>
 
+#include <nlohmann/json.hpp>
+#include "sig_scan.h"
+
 namespace BotController
 {
     namespace WeaponLockerHooks
@@ -11,8 +14,7 @@ namespace BotController
         // Sentinel def index meaning any knife
         constexpr int kKnifeDef = 9001;
 
-        bool Install(const std::string &gamedataPath,
-                     void *serverIface,
+        bool Install(const nlohmann::json &gd, const Sig::ModuleInfo &serverModule,
                      char *errorOut, size_t errorOutLen);
 
         void Remove();

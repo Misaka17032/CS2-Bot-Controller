@@ -57,13 +57,16 @@ add_custom_command(
 )
 
 include(FetchContent)
-if(DEFINED ENV{MINHOOK_SOURCE} AND EXISTS "$ENV{MINHOOK_SOURCE}/CMakeLists.txt")
-    set(FETCHCONTENT_SOURCE_DIR_MINHOOK "$ENV{MINHOOK_SOURCE}" CACHE PATH "")
+set(FUNCHOOK_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(FUNCHOOK_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+if(DEFINED ENV{FUNCHOOK_SOURCE} AND EXISTS "$ENV{FUNCHOOK_SOURCE}/CMakeLists.txt")
+    set(FETCHCONTENT_SOURCE_DIR_FUNCHOOK "$ENV{FUNCHOOK_SOURCE}" CACHE PATH "")
 endif()
-FetchContent_Declare(minhook
-    GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
-    GIT_TAG master GIT_SHALLOW TRUE)
-FetchContent_MakeAvailable(minhook)
+FetchContent_Declare(funchook
+    GIT_REPOSITORY https://github.com/kubo/funchook.git
+    GIT_TAG v2.0.0 GIT_SHALLOW TRUE
+    UPDATE_DISCONNECTED TRUE)
+FetchContent_MakeAvailable(funchook)
 
 set(SDK_SOURCES
     ${HL2SDK}/public/tier0/memoverride.cpp
@@ -86,6 +89,8 @@ add_library(BotController SHARED
     src/BotRecorder/InputInjector.cpp
     src/BotRecorder/MotionRecorder.cpp
     src/common/sig_scan.cpp
+    src/common/version_targets.cpp
+    src/common/platform.cpp
     src/common/ccsbot_slot.cpp
     src/common/dispatch.cpp
     src/common/commands.cpp
@@ -100,6 +105,7 @@ target_include_directories(BotController PRIVATE
     src/WeaponLocker
     src/BotController
     src/BotRecorder
+    ${CMAKE_SOURCE_DIR}/third_party
     ${GENERATED_DIR}
     ${HL2SDK}/thirdparty/protobuf-3.21.8/src
     ${MMS}/core ${MMS}/core/sourcehook ${MMS}/core/sourcemm
@@ -109,34 +115,82 @@ target_include_directories(BotController PRIVATE
     ${HL2SDK}/public/game/shared
     ${HL2SDK}/public/mathlib
     ${HL2SDK}/public/tier0
-    ${HL2SDK}/public/tier1
     ${HL2SDK}/public/entity2
     ${HL2SDK}/game/shared
     ${HL2SDK}/common
 )
 
-set(HL2SDK_LIBDIR ${HL2SDK}/lib/public/win64)
-target_link_libraries(BotController PRIVATE
-    minhook psapi
-    ${HL2SDK_LIBDIR}/tier0.lib
-    ${HL2SDK_LIBDIR}/tier1.lib
-    ${HL2SDK_LIBDIR}/mathlib.lib
-    ${HL2SDK_LIBDIR}/interfaces.lib
-    ${HL2SDK_LIBDIR}/2015/libprotobuf.lib
-)
-target_link_options(BotController PRIVATE /NODEFAULTLIB:LIBCMTD)
+target_link_libraries(BotController PRIVATE funchook-static)
 
 target_compile_definitions(BotController PRIVATE
-    META_IS_SOURCE2 _CRT_SECURE_NO_WARNINGS
-    WIN32 _WIN32 _WINDOWS
-    COMPILER_MSVC COMPILER_MSVC64
-    PLATFORM_64BITS X64BITS
-    NOMINMAX _ALLOW_KEYWORD_MACROS
-    GOOGLE_PROTOBUF_NO_RTTI
-)
+    META_IS_SOURCE2 PLATFORM_64BITS X64BITS GOOGLE_PROTOBUF_NO_RTTI)
 
-# addons package layout
-set(BC_PLATFORM_DIR win64)
+if(WIN32)
+    set(BC_PLATFORM_DIR win64)
+    set(BC_SUFFIX ".dll")
+    set(HL2SDK_LIBDIR ${HL2SDK}/lib/public/win64)
+    # MSVC has no <byteswap.h> clash, so tier1 goes on the normal include path
+    target_include_directories(BotController PRIVATE ${HL2SDK}/public/tier1)
+    target_link_libraries(BotController PRIVATE
+        psapi
+        ${HL2SDK_LIBDIR}/tier0.lib
+        ${HL2SDK_LIBDIR}/tier1.lib
+        ${HL2SDK_LIBDIR}/mathlib.lib
+        ${HL2SDK_LIBDIR}/interfaces.lib
+        ${HL2SDK_LIBDIR}/2015/libprotobuf.lib
+    )
+    target_link_options(BotController PRIVATE /NODEFAULTLIB:LIBCMTD)
+    target_compile_definitions(BotController PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        WIN32 _WIN32 _WINDOWS
+        COMPILER_MSVC COMPILER_MSVC64
+        NOMINMAX _ALLOW_KEYWORD_MACROS
+    )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(BC_PLATFORM_DIR linuxsteamrt64)
+    set(BC_SUFFIX ".so")
+    set(HL2SDK_LIBDIR ${HL2SDK}/lib/linux64)
+    target_link_libraries(BotController PRIVATE
+        ${HL2SDK_LIBDIR}/libtier0.so
+        ${HL2SDK_LIBDIR}/tier1.a
+        ${HL2SDK_LIBDIR}/mathlib.a
+        ${HL2SDK_LIBDIR}/interfaces.a
+        ${HL2SDK_LIBDIR}/release/libprotobuf.a
+        pthread
+        dl
+    )
+    target_compile_definitions(BotController PRIVATE
+        POSIX _LINUX LINUX
+        COMPILER_GCC
+        stricmp=strcasecmp
+        _stricmp=strcasecmp
+        _strnicmp=strncasecmp
+        strnicmp=strncasecmp
+        _snprintf=snprintf
+        _vsnprintf=vsnprintf
+        _alloca=alloca
+        strcmpi=strcasecmp
+    )
+    target_compile_options(BotController PRIVATE
+        -fPIC
+        -fno-rtti
+        -fvisibility=hidden
+        # tier1 last on the search path: glibc's <byteswap.h> wins over SDK's same-named header
+        -idirafter ${HL2SDK}/public/tier1
+        -Wno-non-virtual-dtor
+        -Wno-overloaded-virtual
+        -Wno-register
+        -Wno-narrowing
+        -Wno-deprecated-copy
+    )
+    set_target_properties(BotController PROPERTIES
+        SKIP_BUILD_RPATH TRUE
+        BUILD_RPATH ""
+        INSTALL_RPATH ""
+    )
+else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+endif()
 set(BC_PACKAGE_BIN_DIR "${CMAKE_BINARY_DIR}/package/addons/BotController/bin/${BC_PLATFORM_DIR}")
 set(BC_VDF_FILE "addons/BotController/bin/${BC_PLATFORM_DIR}/BotController")
 configure_file(
@@ -148,7 +202,7 @@ configure_file(
 set_target_properties(BotController PROPERTIES
     OUTPUT_NAME "BotController"
     PREFIX ""
-    SUFFIX ".dll"
+    SUFFIX "${BC_SUFFIX}"
     RUNTIME_OUTPUT_DIRECTORY         "${BC_PACKAGE_BIN_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BC_PACKAGE_BIN_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${BC_PACKAGE_BIN_DIR}"

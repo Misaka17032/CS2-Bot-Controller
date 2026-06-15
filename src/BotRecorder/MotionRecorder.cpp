@@ -396,7 +396,6 @@ namespace BotController
             if (!ValidSlot(slot))
                 return false;
             g_rep[slot].playing.store(false, std::memory_order_release);
-            InputInjector::ClearInput(slot);
             return true;
         }
 
@@ -692,7 +691,6 @@ namespace BotController
                         return;
                     }
                     p.playing.store(false, std::memory_order_release);
-                    InputInjector::ClearInput(slot);
                     return;
                 }
                 t = p.ticks[cur];

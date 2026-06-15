@@ -8,9 +8,8 @@
 #include "dispatch.h"
 #include "MotionRecorder.h"
 #include "version_targets.h"
-
-#include <Windows.h>
-#include <MinHook.h>
+#include "hook.h"
+#include "platform.h"
 
 #include <tier0/dbg.h>
 #include <eiface.h>
@@ -24,10 +23,10 @@
 
 namespace tg = BotController::targets;
 
-using EquipBestWeapon_t = void(__fastcall *)(void *self, char mustEquip);
-using EquipPistol_t = void(__fastcall *)(void *self, char mustEquip);
-using SelectItem_t = char(__fastcall *)(void *ws, void *weapon, int flag);
-using GetSlot_t = void *(__fastcall *)(void *ws, int slot, unsigned int mask);
+using EquipBestWeapon_t = void(BC_FASTCALL *)(void *self, char mustEquip);
+using EquipPistol_t = void(BC_FASTCALL *)(void *self, char mustEquip);
+using SelectItem_t = char(BC_FASTCALL *)(void *ws, void *weapon, int flag);
+using GetSlot_t = void *(BC_FASTCALL *)(void *ws, int slot, unsigned int mask);
 
 namespace BotController
 {
@@ -42,6 +41,10 @@ namespace BotController
         static void *g_addrEquipPistol = nullptr;
         static void *g_addrSelectItem = nullptr;
         static void *g_addrGetSlot = nullptr;
+
+        static Hook g_hookEquipBestWeapon;
+        static Hook g_hookEquipPistol;
+        static Hook g_hookSelectItem;
 
         static std::string g_status = "not_attempted";
         static bool g_installed = false;
@@ -130,7 +133,7 @@ namespace BotController
 
         // ---- detours ----
 
-        static void __fastcall HookedEquipBestWeapon(void *bot, char mustEquip)
+        static void BC_FASTCALL HookedEquipBestWeapon(void *bot, char mustEquip)
         {
             auto sr = ResolveSlot(bot);
             if (sr.slot >= 0)
@@ -142,7 +145,7 @@ namespace BotController
             g_origEquipBestWeapon(bot, mustEquip);
         }
 
-        static void __fastcall HookedEquipPistol(void *bot, char mustEquip)
+        static void BC_FASTCALL HookedEquipPistol(void *bot, char mustEquip)
         {
             auto sr = ResolveSlot(bot);
             if (sr.slot >= 0)
@@ -157,7 +160,7 @@ namespace BotController
         // Block-log dedup
         static void *g_lastBlockedWeapon[64] = {nullptr};
 
-        static char __fastcall HookedSelectItem(void *ws, void *weapon, int flag)
+        static char BC_FASTCALL HookedSelectItem(void *ws, void *weapon, int flag)
         {
             // Recording : a human switching weapons calls SelectItem
             if (weapon)
@@ -212,88 +215,39 @@ namespace BotController
 
         // ---- install / remove ----
 
-        static void *ResolveSig(const std::string &gamedataText,
-                                HMODULE serverModule,
-                                const char *name,
-                                char *errorOut, size_t errorOutLen)
-        {
-            std::string sig = Sig::FindWindowsSig(gamedataText, name);
-            if (sig.empty())
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "gamedata missing '%s.signatures.windows'", name);
-                return nullptr;
-            }
-            std::vector<uint8_t> bytes;
-            std::vector<bool> wild;
-            if (!Sig::ParseSigString(sig, bytes, wild))
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "failed to parse '%s' sig: '%s'", name, sig.c_str());
-                return nullptr;
-            }
-            void *addr = Sig::FindPatternIn(serverModule, bytes, wild);
-            if (!addr)
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "sig '%s' not found in server.dll", name);
-                return nullptr;
-            }
-            return addr;
-        }
-
-        bool Install(const std::string &gamedataPath,
-                     void *serverIface,
+        bool Install(const nlohmann::json &gd, const Sig::ModuleInfo &serverModule,
                      char *errorOut, size_t errorOutLen)
         {
-            HMODULE serverModule = Sig::ModuleFromInterfacePtr(serverIface);
-            if (!serverModule)
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "ModuleFromInterfacePtr returned null");
-                g_status = "failed: no server module";
-                return false;
-            }
-
-            std::string gd = Sig::ReadFile(gamedataPath);
-            if (gd.empty())
-            {
-                std::snprintf(errorOut, errorOutLen,
-                              "failed to read gamedata: %s", gamedataPath.c_str());
-                g_status = "failed: gamedata missing";
-                return false;
-            }
-
-            g_addrEquipBestWeapon = ResolveSig(gd, serverModule,
-                                               "CCSBot::EquipBestWeapon",
-                                               errorOut, errorOutLen);
+            g_addrEquipBestWeapon = Sig::ResolveSig(gd, serverModule,
+                                                    "CCSBot::EquipBestWeapon",
+                                                    errorOut, errorOutLen);
             if (!g_addrEquipBestWeapon)
             {
                 g_status = "failed: EquipBestWeapon sig";
                 return false;
             }
 
-            g_addrEquipPistol = ResolveSig(gd, serverModule,
-                                           "CCSBot::EquipPistol",
-                                           errorOut, errorOutLen);
+            g_addrEquipPistol = Sig::ResolveSig(gd, serverModule,
+                                                "CCSBot::EquipPistol",
+                                                errorOut, errorOutLen);
             if (!g_addrEquipPistol)
             {
                 g_status = "failed: EquipPistol sig";
                 return false;
             }
 
-            g_addrSelectItem = ResolveSig(gd, serverModule,
-                                          "CCSPlayer_WeaponServices::SelectItem",
-                                          errorOut, errorOutLen);
+            g_addrSelectItem = Sig::ResolveSig(gd, serverModule,
+                                               "CCSPlayer_WeaponServices::SelectItem",
+                                               errorOut, errorOutLen);
             if (!g_addrSelectItem)
             {
                 g_status = "failed: SelectItem sig";
                 return false;
             }
 
-            g_addrGetSlot = ResolveSig(gd, serverModule,
-                                       "CCSPlayer_WeaponServices::GetSlot",
-                                       errorOut, errorOutLen);
+            g_addrGetSlot = Sig::ResolveSig(gd, serverModule,
+                                            "CCSPlayer_WeaponServices::GetSlot",
+                                            errorOut, errorOutLen);
             if (!g_addrGetSlot)
             {
                 g_status = "failed: GetSlot sig";
@@ -301,53 +255,47 @@ namespace BotController
             }
             g_pGetSlot = reinterpret_cast<GetSlot_t>(g_addrGetSlot);
 
-            if (MH_Initialize() != MH_OK)
-            {
-                std::snprintf(errorOut, errorOutLen, "MH_Initialize failed");
-                g_status = "failed: MH_Initialize";
-                return false;
-            }
-
             auto failCleanup = [&](const char *what) -> bool
             {
                 std::snprintf(errorOut, errorOutLen, "%s failed", what);
-                MH_Uninitialize();
+                g_hookEquipBestWeapon.Remove();
+                g_hookEquipPistol.Remove();
+                g_hookSelectItem.Remove();
                 g_origEquipBestWeapon = nullptr;
                 g_origEquipPistol = nullptr;
                 g_origSelectItem = nullptr;
                 return false;
             };
 
-            if (MH_CreateHook(g_addrEquipBestWeapon,
-                              reinterpret_cast<void *>(&HookedEquipBestWeapon),
-                              reinterpret_cast<void **>(&g_origEquipBestWeapon)) != MH_OK)
+            if (!g_hookEquipBestWeapon.Create(g_addrEquipBestWeapon,
+                                              reinterpret_cast<void *>(&HookedEquipBestWeapon),
+                                              reinterpret_cast<void **>(&g_origEquipBestWeapon)))
             {
-                g_status = "failed: MH_CreateHook EquipBestWeapon";
-                return failCleanup("MH_CreateHook EquipBestWeapon");
+                g_status = "failed: Create EquipBestWeapon";
+                return failCleanup("Create EquipBestWeapon");
             }
 
-            if (MH_CreateHook(g_addrEquipPistol,
-                              reinterpret_cast<void *>(&HookedEquipPistol),
-                              reinterpret_cast<void **>(&g_origEquipPistol)) != MH_OK)
+            if (!g_hookEquipPistol.Create(g_addrEquipPistol,
+                                          reinterpret_cast<void *>(&HookedEquipPistol),
+                                          reinterpret_cast<void **>(&g_origEquipPistol)))
             {
-                g_status = "failed: MH_CreateHook EquipPistol";
-                return failCleanup("MH_CreateHook EquipPistol");
+                g_status = "failed: Create EquipPistol";
+                return failCleanup("Create EquipPistol");
             }
 
-            if (MH_CreateHook(g_addrSelectItem,
-                              reinterpret_cast<void *>(&HookedSelectItem),
-                              reinterpret_cast<void **>(&g_origSelectItem)) != MH_OK)
+            if (!g_hookSelectItem.Create(g_addrSelectItem,
+                                         reinterpret_cast<void *>(&HookedSelectItem),
+                                         reinterpret_cast<void **>(&g_origSelectItem)))
             {
-                g_status = "failed: MH_CreateHook SelectItem";
-                return failCleanup("MH_CreateHook SelectItem");
+                g_status = "failed: Create SelectItem";
+                return failCleanup("Create SelectItem");
             }
 
-            if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK)
+            if (!g_hookEquipBestWeapon.Enable() || !g_hookEquipPistol.Enable() ||
+                !g_hookSelectItem.Enable())
             {
-                std::snprintf(errorOut, errorOutLen, "MH_EnableHook failed");
-                MH_Uninitialize();
-                g_status = "failed: MH_EnableHook";
-                return false;
+                g_status = "failed: Enable";
+                return failCleanup("Enable");
             }
 
             g_installed = true;
@@ -358,7 +306,7 @@ namespace BotController
                           "[BotWeaponLock] hooks installed: EquipBestWeapon=%p EquipPistol=%p SelectItem=%p GetSlot=%p\n",
                           g_addrEquipBestWeapon, g_addrEquipPistol,
                           g_addrSelectItem, g_addrGetSlot);
-            OutputDebugStringA(dbg);
+            DebugOut(dbg);
             return true;
         }
 
@@ -366,11 +314,12 @@ namespace BotController
         {
             if (!g_installed)
                 return;
-            MH_DisableHook(MH_ALL_HOOKS);
-            MH_RemoveHook(g_addrEquipBestWeapon);
-            MH_RemoveHook(g_addrEquipPistol);
-            MH_RemoveHook(g_addrSelectItem);
-            MH_Uninitialize();
+            g_hookSelectItem.Remove();
+            g_hookEquipPistol.Remove();
+            g_hookEquipBestWeapon.Remove();
+            g_origEquipBestWeapon = nullptr;
+            g_origEquipPistol = nullptr;
+            g_origSelectItem = nullptr;
             g_installed = false;
             g_status = "not_attempted";
             {

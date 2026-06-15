@@ -2,7 +2,6 @@
 
 #include <ISmmPlugin.h>
 
-#include <Windows.h>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -12,6 +11,8 @@
 #include <convar.h>
 #include <interfaces/interfaces.h>
 
+#include <nlohmann/json.hpp>
+
 #include "WeaponLocker.h"
 #include "BotController.h"
 #include "InputInjector.h"
@@ -20,6 +21,9 @@
 #include "WeaponLockerState.h"
 #include "BotControllerState.h"
 #include "commands.h"
+#include "sig_scan.h"
+#include "platform.h"
+#include "version_targets.h"
 
 class BotControllerPlugin : public ISmmPlugin
 {
@@ -33,10 +37,10 @@ public:
 
     const char *GetAuthor() override { return "XBribo(๑•.•๑)"; }
     const char *GetName() override { return "BotController"; }
-    const char *GetDescription() override { return "Lock and Record CS2 bots."; }
+    const char *GetDescription() override { return "Record and Replay CS2 bots."; }
     const char *GetURL() override { return ""; }
     const char *GetLicense() override { return "GPLv3"; }
-    const char *GetVersion() override { return "0.4.4"; }
+    const char *GetVersion() override { return "0.4.5"; }
     const char *GetDate() override { return __DATE__; }
     const char *GetLogTag() override { return "BL"; }
 };
@@ -44,33 +48,20 @@ public:
 BotControllerPlugin g_BotControllerPlugin;
 PLUGIN_EXPOSE(BotControllerPlugin, g_BotControllerPlugin);
 
-static HMODULE GetSelfModule()
-{
-    HMODULE mod = nullptr;
-    GetModuleHandleExA(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCSTR>(&GetSelfModule),
-        &mod);
-    return mod;
-}
-
-// gamedata.json
+// addons/<name>/bin/<platform>/<lib> -> up 3 dirs -> addons/<name>/gamedata.json
 static std::string ComputeGamedataPath()
 {
-    char path[MAX_PATH] = {0};
-    if (GetModuleFileNameA(GetSelfModule(), path, MAX_PATH) == 0)
+    std::string p = BotController::SelfModulePath();
+    if (p.empty())
         return "";
-
     for (int i = 0; i < 3; ++i)
     {
-        char *slash = std::strrchr(path, '\\');
-        if (!slash)
+        size_t slash = p.find_last_of("/\\");
+        if (slash == std::string::npos)
             return "";
-        *slash = '\0';
+        p.resize(slash);
     }
-    std::string result(path);
-    result += "\\gamedata.json";
-    return result;
+    return p + "/gamedata.json";
 }
 
 bool BotControllerPlugin::Load(PluginId id, ISmmAPI *ismm,
@@ -121,31 +112,46 @@ bool BotControllerPlugin::Load(PluginId id, ISmmAPI *ismm,
         return false;
     }
 
-    if (!BotController::WeaponLockerHooks::Install(gamedataPath, serverIface,
-                                                   error, maxlen))
+    nlohmann::json gd;
+    if (!BotController::Sig::LoadGamedata(gamedataPath.c_str(), gd))
+    {
+        std::snprintf(error, maxlen, "Failed to load gamedata: %s", gamedataPath.c_str());
+        return false;
+    }
+
+    BotController::Sig::ModuleInfo serverModule =
+        BotController::Sig::ModuleFromInterfacePtr(serverIface);
+    if (!serverModule)
+    {
+        std::snprintf(error, maxlen, "ModuleFromInterfacePtr returned null");
+        return false;
+    }
+
+    // offsets first (hooks/detours read tg::k* at runtime)
+    BotController::targets::LoadFromGamedata(gd);
+
+    if (!BotController::WeaponLockerHooks::Install(gd, serverModule, error, maxlen))
         return false;
 
-    if (!BotController::BotControllerHooks::Install(gamedataPath, serverIface,
-                                                    error, maxlen))
+    if (!BotController::BotControllerHooks::Install(gd, serverModule, error, maxlen))
     {
         BotController::WeaponLockerHooks::Remove();
         return false;
     }
 
-    // ProcessUsercmd hook for demo-replay UserCmd injection
+    // movement hooks for record/replay
     char injErr[256] = {0};
-    if (!BotController::InputInjector::Install(gamedataPath, serverIface,
-                                               injErr, sizeof(injErr)))
+    if (!BotController::InputInjector::Install(gd, serverModule, injErr, sizeof(injErr)))
     {
         char dbg[320];
         std::snprintf(dbg, sizeof(dbg),
                       "[BotController] WARN: InputInjector::Install failed (%s); "
-                      "BotController_InjectUserCmd will be a no-op\n",
+                      "record/replay movement will be a no-op\n",
                       injErr);
-        OutputDebugStringA(dbg);
+        BotController::DebugOut(dbg);
     }
 
-    OutputDebugStringA("[BotController] plugin loaded successfully\n");
+    BotController::DebugOut("[BotController] plugin loaded successfully\n");
     return true;
 }
 
@@ -163,6 +169,6 @@ bool BotControllerPlugin::Unload(char * /*error*/, size_t /*maxlen*/)
     BotController::Commands::g_pEngine = nullptr;
     ConVar_Unregister();
     g_pCVar = nullptr;
-    OutputDebugStringA("[BotController] plugin unloaded\n");
+    BotController::DebugOut("[BotController] plugin unloaded\n");
     return true;
 }
