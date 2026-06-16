@@ -1,5 +1,7 @@
 # CS2-Bot-Controller
 
+## or CS2-Bot-Mimic2
+
 **Make Bot Mimic Again**
 
 ## Your stars⭐ are my motivation to keep updating
