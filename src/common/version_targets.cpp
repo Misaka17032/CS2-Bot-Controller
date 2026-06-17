@@ -10,6 +10,8 @@ namespace BotController::targets
     {
         kBot_AiTickedFlag        = Sig::FindPlatformOffset(gd, "CCSBot::AiTickedFlag", kBot_AiTickedFlag);
         kBot_Pawn                = Sig::FindPlatformOffset(gd, "CCSBot::Pawn", kBot_Pawn);
+        kBuy_InitialDelay        = Sig::FindPlatformOffset(gd, "BuyState::InitialDelay", kBuy_InitialDelay);
+        kBuy_DoneBuying          = Sig::FindPlatformOffset(gd, "BuyState::DoneBuying", kBuy_DoneBuying);
         kEnt_Identity            = Sig::FindPlatformOffset(gd, "CBaseEntity::Identity", kEnt_Identity);
         kEntIdentity_EHandle     = Sig::FindPlatformOffset(gd, "CEntityIdentity::EHandle", kEntIdentity_EHandle);
         kEnt_MoveType            = Sig::FindPlatformOffset(gd, "CBaseEntity::MoveType", kEnt_MoveType);

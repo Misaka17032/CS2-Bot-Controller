@@ -1,5 +1,7 @@
 # CS2-Bot-Controller
 
+## or CS2-Bot-Mimic2
+
 **Make Bot Mimic Again**
 
 ## Your stars⭐ are my motivation to keep updating
@@ -157,6 +159,7 @@ buffers can be serialized and reloaded across rounds. Main thread only.
 ## Special thanks
 
 - [cs2kz-metamod](https://github.com/KZGlobalTeam/cs2kz-metamod) for helping determine the replay framework.
+- [Misaka17032](https://github.com/Misaka17032) for adding Linux support to the plugin.
 
 ------------------------------------------------------------------------
 

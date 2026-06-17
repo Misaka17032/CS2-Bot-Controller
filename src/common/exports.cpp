@@ -3,8 +3,10 @@
 #include "dispatch.h"
 #include "MotionRecorder.h"
 #include "InputInjector.h"
+#include "BuyControllerState.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #if defined(_WIN32)
@@ -39,7 +41,69 @@ extern "C" BC_EXPORT int BotController_IsLocked(int slot, int kind)
 
 extern "C" BC_EXPORT int BotController_GetVersion()
 {
-    return 10;
+    return 11;
+}
+
+// ---- Bot buy plans ----
+
+// Split a space/comma separated alias string into tokens.
+static std::vector<std::string> SplitAliases(const char *csv)
+{
+    std::vector<std::string> out;
+    if (!csv)
+        return out;
+    std::string cur;
+    for (const char *p = csv; *p; ++p)
+    {
+        char c = *p;
+        if (c == ' ' || c == ',' || c == '\t')
+        {
+            if (!cur.empty()) { out.push_back(cur); cur.clear(); }
+        }
+        else
+            cur.push_back(c);
+    }
+    if (!cur.empty())
+        out.push_back(cur);
+    return out;
+}
+
+// Set a slot's buy plan from a space/comma separated alias list. 0 ok.
+extern "C" BC_EXPORT int BotController_SetBuyPlan(int slot, const char *aliases)
+{
+    if (slot < 0 || slot >= BotController::BuyControllerState::kMaxSlots)
+        return -2;
+    BotController::BuyControllerState::Set(slot, SplitAliases(aliases), false);
+    return 0;
+}
+
+// Mark a slot to buy nothing this round. 0 ok.
+extern "C" BC_EXPORT int BotController_SetBuySkip(int slot)
+{
+    if (slot < 0 || slot >= BotController::BuyControllerState::kMaxSlots)
+        return -2;
+    BotController::BuyControllerState::Set(slot, {}, true);
+    return 0;
+}
+
+extern "C" BC_EXPORT int BotController_ClearBuyPlan(int slot)
+{
+    if (slot < 0 || slot >= BotController::BuyControllerState::kMaxSlots)
+        return -2;
+    BotController::BuyControllerState::Clear(slot);
+    return 0;
+}
+
+extern "C" BC_EXPORT int BotController_ClearAllBuyPlans()
+{
+    BotController::BuyControllerState::ClearAll();
+    return 0;
+}
+
+// Item count for a slot's plan: -1 none, 0 skip/empty, >0 alias count.
+extern "C" BC_EXPORT int BotController_GetBuyPlanItemCount(int slot)
+{
+    return BotController::BuyControllerState::ItemCount(slot);
 }
 
 // ---- Motion recording & replay ----

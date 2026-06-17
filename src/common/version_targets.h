@@ -13,6 +13,13 @@ namespace BotController::targets
     // CCSBot -> pawn (CCSPlayerPawn*)
     inline int kBot_Pawn = 0x18;
 
+    // ---- BuyState (a1 in BuyState::OnUpdate) ----
+
+    // m_isInitialDelay (bool); rising edge each round = freshly entered BuyState
+    inline int kBuy_InitialDelay = 0x08;
+    // m_doneBuying (bool); set 1 to make vanilla skip the rest of buying
+    inline int kBuy_DoneBuying = 0x18;
+
     // ---- CBaseEntity / CEntityIdentity ----
 
     // entity -> CEntityIdentity*
