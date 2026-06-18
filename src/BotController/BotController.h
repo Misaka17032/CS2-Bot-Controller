@@ -24,5 +24,9 @@ namespace BotController
         void *UpkeepAddress();
         void *JumpAddress();
         void *UpdateLookAnglesAddress();
+
+        // Last CCSBot* seen in Update for this slot, or nullptr. Used to read
+        // the bot's BotProfile by slot.
+        void *BotForSlot(int slot);
     }
 }

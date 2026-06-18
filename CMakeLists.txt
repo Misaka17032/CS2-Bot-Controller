@@ -121,6 +121,7 @@ add_library(BotController SHARED
     src/BuyController/BuyControllerState.cpp
     src/BotRecorder/InputInjector.cpp
     src/BotRecorder/MotionRecorder.cpp
+    src/BotProfile/BotProfile.cpp
     src/common/sig_scan.cpp
     src/common/version_targets.cpp
     src/common/platform.cpp
@@ -139,6 +140,7 @@ target_include_directories(BotController PRIVATE
     src/BotController
     src/BuyController
     src/BotRecorder
+    src/BotProfile
     ${CMAKE_SOURCE_DIR}/third_party
     ${GENERATED_DIR}
     ${HL2SDK}/thirdparty/protobuf-3.21.8/src

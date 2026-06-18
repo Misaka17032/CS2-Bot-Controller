@@ -104,13 +104,63 @@ Record / replay is driven through the C-ABI below, not console commands.
 
 ## CounterStrikeSharp API
 
-Drop `scripts/BotController.NativeApi.cs` into your project.
+There are two ways to consume the API. Pick one.
+
+### Option A — shared capability (recommended)
+
+Other plugins reference the shared `BotControllerApi.dll` and obtain the API at
+runtime through a CounterStrikeSharp capability. No P/Invoke, no ABI constant in
+your project — when the native layer bumps its ABI, your plugin keeps working as
+long as the interface methods you call are unchanged.
+
+The build deploys the contract DLL to
+`addons/counterstrikesharp/shared/BotControllerApi/BotControllerApi.dll`. The
+provider plugin `BotControllerImpl` registers the implementation on load.
+
+In your plugin's `.csproj`, reference the shared DLL without copying it (both
+sides must load the one shared assembly). Point `HintPath` at the deployed
+contract DLL (adjust the path to your server layout):
+
+```xml
+<Reference Include="BotControllerApi">
+  <HintPath>../addons/counterstrikesharp/shared/BotControllerApi/BotControllerApi.dll</HintPath>
+  <Private>false</Private>
+</Reference>
+```
+
+Then grab the API and call it:
 
 ```csharp
 using BotControllerApi;
 
-if (!BotController.IsCompatible()) return;   // requires ABI 10
+private IBotControllerApi? _bots;
+
+public override void OnAllPluginsLoaded(bool hotReload)
+{
+    _bots = BotControllerCapability.Cap.Get();
+    if (_bots is null)
+        Server.PrintToConsole("[MyPlugin] BotController not loaded.");
+}
+
+// ... later ...
+_bots?.Lock(slot, LockKind.All);
+if (_bots is not null && _bots.TryGetProfile(slot, out var prof))
+    Server.PrintToConsole($"skill={prof.Skill}");
 ```
+
+### Option B — static P/Invoke wrapper (legacy)
+
+Drop `scripts/BotController.NativeApi.cs` into your project. Self-contained but
+ABI-coupled: a native ABI bump means re-copying the file.
+
+```csharp
+using BotControllerApi;
+
+if (!BotController.IsCompatible()) return;   // requires the matching ABI
+```
+
+The static `BotController.*` calls below mirror the `IBotControllerApi` methods
+one-to-one, so either option uses the same names.
 
 ### Locks
 

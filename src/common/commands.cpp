@@ -10,6 +10,7 @@
 #include "MotionRecorder.h"
 #include "BuyControllerState.h"
 #include "BuyController.h"
+#include "BotProfile.h"
 
 #include <tier0/dbg.h>
 #include <convar.h>
@@ -464,4 +465,45 @@ CON_COMMAND_F(bc_unbuy_all,
     using namespace BotController;
     BuyControllerState::ClearAll();
     Commands::PrintToCaller(context, "[BC] all buy plans cleared\n");
+}
+
+CON_COMMAND_F(bc_profile,
+              "bc_profile <slot>  Print a bot's BotProfile (skill/aim/weapon prefs).",
+              FCVAR_NONE)
+{
+    using namespace BotController;
+
+    if (args.ArgC() < 2)
+    {
+        Commands::PrintToCaller(context, "usage: bc_profile <slot>\n");
+        return;
+    }
+
+    const int slot = std::atoi(args.Arg(1));
+    BotProfileData d;
+    if (!BotProfile::ReadProfile(slot, d))
+    {
+        Commands::PrintToCaller(context,
+                                "[BC] error: no live bot on slot %d (it must have ticked once)\n",
+                                slot);
+        return;
+    }
+
+    Commands::PrintToCaller(context,
+                            "[BC] profile slot %d: skill=%.2f aggression=%.2f teamwork=%.2f\n",
+                            slot, d.skill, d.aggression, d.teamwork);
+    Commands::PrintToCaller(context,
+                            "[BC]   reaction=%.3f attackDelay=%.3f cost=%d difficulty=0x%X\n",
+                            d.reactionTime, d.attackDelay, d.cost, d.difficulty);
+    Commands::PrintToCaller(context,
+                            "[BC]   lookAtk accel=%.1f stiff=%.1f damp=%.1f\n",
+                            d.lookAccelAtk, d.lookStiffAtk, d.lookDampAtk);
+
+    // Weapon preference: item def indices in priority order
+    char line[256];
+    int n = std::snprintf(line, sizeof(line), "[BC]   weaponPref(%d):", d.weaponPrefCount);
+    for (int i = 0; i < d.weaponPrefCount && n < (int)sizeof(line) - 8; ++i)
+        n += std::snprintf(line + n, sizeof(line) - n, " %u", d.weaponPref[i]);
+    std::snprintf(line + n, sizeof(line) - n, "\n");
+    Commands::PrintToCaller(context, "%s", line);
 }

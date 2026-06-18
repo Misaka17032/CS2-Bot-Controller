@@ -12,6 +12,23 @@ namespace BotController::targets
     inline int kBot_AiTickedFlag = 21196;
     // CCSBot -> pawn (CCSPlayerPawn*)
     inline int kBot_Pawn = 0x18;
+    // CCSBot -> m_profile (BotProfile*)
+    inline int kBot_Profile = 0x08;
+
+    // ---- BotProfile (CCSBot+kBot_Profile) ----
+
+    inline int kProf_Aggression = 0x08;   // float, 0..1
+    inline int kProf_Skill = 0x0C;        // float, 0..1
+    inline int kProf_Teamwork = 0x10;     // float, 0..1
+    inline int kProf_WeaponPref = 0x24;   // WORD[16] item def index, stride 2
+    inline int kProf_WeaponPrefCount = 0x44; // int
+    inline int kProf_Cost = 0x48;         // int
+    inline int kProf_Difficulty = 0x50;   // u8 bitflags EASY/NORMAL/HARD/EXPERT
+    inline int kProf_ReactionTime = 0x58; // float
+    inline int kProf_AttackDelay = 0x5C;  // float
+    inline int kProf_LookAccelAtk = 0x78; // float m_lookAngleMaxAccelAttacking
+    inline int kProf_LookStiffAtk = 0x7C; // float m_lookAngleStiffnessAttacking
+    inline int kProf_LookDampAtk = 0x80;  // float m_lookAngleDampingAttacking
 
     // ---- BuyState (a1 in BuyState::OnUpdate) ----
 

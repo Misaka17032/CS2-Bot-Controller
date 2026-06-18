@@ -10,6 +10,19 @@ namespace BotController::targets
     {
         kBot_AiTickedFlag        = Sig::FindPlatformOffset(gd, "CCSBot::AiTickedFlag", kBot_AiTickedFlag);
         kBot_Pawn                = Sig::FindPlatformOffset(gd, "CCSBot::Pawn", kBot_Pawn);
+        kBot_Profile             = Sig::FindPlatformOffset(gd, "CCSBot::Profile", kBot_Profile);
+        kProf_Aggression         = Sig::FindPlatformOffset(gd, "BotProfile::Aggression", kProf_Aggression);
+        kProf_Skill              = Sig::FindPlatformOffset(gd, "BotProfile::Skill", kProf_Skill);
+        kProf_Teamwork           = Sig::FindPlatformOffset(gd, "BotProfile::Teamwork", kProf_Teamwork);
+        kProf_WeaponPref         = Sig::FindPlatformOffset(gd, "BotProfile::WeaponPref", kProf_WeaponPref);
+        kProf_WeaponPrefCount    = Sig::FindPlatformOffset(gd, "BotProfile::WeaponPrefCount", kProf_WeaponPrefCount);
+        kProf_Cost               = Sig::FindPlatformOffset(gd, "BotProfile::Cost", kProf_Cost);
+        kProf_Difficulty         = Sig::FindPlatformOffset(gd, "BotProfile::Difficulty", kProf_Difficulty);
+        kProf_ReactionTime       = Sig::FindPlatformOffset(gd, "BotProfile::ReactionTime", kProf_ReactionTime);
+        kProf_AttackDelay        = Sig::FindPlatformOffset(gd, "BotProfile::AttackDelay", kProf_AttackDelay);
+        kProf_LookAccelAtk       = Sig::FindPlatformOffset(gd, "BotProfile::LookAngleMaxAccelAttacking", kProf_LookAccelAtk);
+        kProf_LookStiffAtk       = Sig::FindPlatformOffset(gd, "BotProfile::LookAngleStiffnessAttacking", kProf_LookStiffAtk);
+        kProf_LookDampAtk        = Sig::FindPlatformOffset(gd, "BotProfile::LookAngleDampingAttacking", kProf_LookDampAtk);
         kBuy_InitialDelay        = Sig::FindPlatformOffset(gd, "BuyState::InitialDelay", kBuy_InitialDelay);
         kBuy_DoneBuying          = Sig::FindPlatformOffset(gd, "BuyState::DoneBuying", kBuy_DoneBuying);
         kEnt_Identity            = Sig::FindPlatformOffset(gd, "CBaseEntity::Identity", kEnt_Identity);

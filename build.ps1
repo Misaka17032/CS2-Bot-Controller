@@ -4,6 +4,7 @@ param(
     [switch]$Windows,
     [switch]$Linux,
     [switch]$Clean,
+    [switch]$SkipCsharp,
     [string]$Config = "Release",
     [string]$WslDistro = "Ubuntu-24.04",
     [string]$Generator = "Visual Studio 18 2026"
@@ -104,6 +105,36 @@ function Build-Dist([string]$nativePkg, [string]$destRoot) {
     Write-Ok "assembled $((Resolve-Path $destRoot).Path)"
 }
 
+# --- C# plugins ----------------------------------------------------------
+# Build the shared API DLL + the BotControllerImpl provider plugin.
+function Build-CSharp {
+    Write-Step "C# (shared API + provider plugin)"
+    $impl = Join-Path $Root "csharp/BotControllerImpl"
+    # Building the provider also builds the referenced shared API project.
+    dotnet build $impl -c $Config | Out-Host
+    if ($LASTEXITCODE) { throw "dotnet build (csharp) failed" }
+    $sharedDll = Join-Path $Root "csharp/BotControllerApi/bin/$Config/BotControllerApi.dll"
+    $pluginDll = Join-Path $impl "bin/$Config/BotControllerImpl.dll"
+    foreach ($d in @($sharedDll, $pluginDll)) {
+        if (-not (Test-Path $d)) { throw "csharp build produced no $(Split-Path $d -Leaf)" }
+    }
+    Write-Ok "BotControllerApi.dll + BotControllerImpl.dll built"
+    return @{ Shared = $sharedDll; Plugin = $pluginDll }
+}
+
+# Deploy managed DLLs into a dist tree's CounterStrikeSharp layout.
+function Deploy-CSharp([hashtable]$csOut, [string]$destRoot) {
+    if (-not $csOut) { return }
+    $css = Join-Path $destRoot "addons/counterstrikesharp"
+    $sharedDir = Join-Path $css "shared/BotControllerApi"
+    $pluginDir = Join-Path $css "plugins/BotControllerImpl"
+    New-Item -ItemType Directory -Force $sharedDir | Out-Null
+    New-Item -ItemType Directory -Force $pluginDir | Out-Null
+    Copy-Item -Force $csOut.Shared $sharedDir
+    Copy-Item -Force $csOut.Plugin $pluginDir
+    Write-Ok "deployed C# into $((Resolve-Path $css).Path)"
+}
+
 # --- Main ----------------------------------------------------------------
 $winPkg = $null; $linPkg = $null
 if ($Windows) { $winPkg = Build-Windows }
@@ -112,6 +143,15 @@ if ($Linux) { $linPkg = Build-Linux }
 Write-Step "Dist"
 if ($Windows) { Build-Dist $winPkg $DistWin }
 if ($Linux) { Build-Dist $linPkg $DistLin }
+
+# C# managed plugins: build once, deploy into each assembled dist tree
+$csOut = $null
+if (-not $SkipCsharp) { $csOut = Build-CSharp }
+if ($csOut) {
+    Write-Step "Deploy C#"
+    if ($Windows) { Deploy-CSharp $csOut $DistWin }
+    if ($Linux) { Deploy-CSharp $csOut $DistLin }
+}
 
 Write-Step "Done"
 if ($Windows) { Write-Ok "Windows -> dist/windows/" }

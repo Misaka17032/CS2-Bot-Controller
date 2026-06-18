@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <mutex>
 #include <vector>
 
 namespace tg = BotController::targets;
@@ -41,6 +42,10 @@ namespace BotController
         static bool g_installed = false;
         static std::string g_status = "not_attempted";
 
+        // slot -> last CCSBot* seen in Update (for profile reads by slot)
+        static void *g_slotToBot[64] = {nullptr};
+        static std::mutex g_slotToBotMu;
+
         static Hook g_hookUpdate;
         static Hook g_hookUpkeep;
         static Hook g_hookJump;
@@ -51,6 +56,11 @@ namespace BotController
         static void BC_FASTCALL HookedUpdate(void *bot)
         {
             int slot = CCSBotToSlot(bot);
+            if (slot >= 0 && slot < 64)
+            {
+                std::lock_guard<std::mutex> lk(g_slotToBotMu);
+                g_slotToBot[slot] = bot;
+            }
             if (slot >= 0 &&
                 (BotControllerState::GetAll(slot) || MotionRecorder::IsReplaying(slot)))
             {
@@ -273,6 +283,11 @@ namespace BotController
             g_origUpdate = nullptr;
             g_installed = false;
             g_status = "not_attempted";
+            {
+                std::lock_guard<std::mutex> lk(g_slotToBotMu);
+                for (int i = 0; i < 64; ++i)
+                    g_slotToBot[i] = nullptr;
+            }
         }
 
         const char *Status() { return g_status.c_str(); }
@@ -280,5 +295,14 @@ namespace BotController
         void *UpkeepAddress() { return g_addrUpkeep; }
         void *JumpAddress() { return g_addrJump; }
         void *UpdateLookAnglesAddress() { return g_addrUpdateLookAngles; }
+
+        // Last CCSBot* seen in Update for this slot
+        void *BotForSlot(int slot)
+        {
+            if (slot < 0 || slot >= 64)
+                return nullptr;
+            std::lock_guard<std::mutex> lk(g_slotToBotMu);
+            return g_slotToBot[slot];
+        }
     }
 }

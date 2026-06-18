@@ -123,6 +123,97 @@
     },
     "comment": "CCSBot -> pawn (0x18)."
   },
+  "CCSBot::Profile": {
+    "offsets": {
+      "windows": 8,
+      "linux": 8
+    },
+    "comment": "CCSBot -> m_profile (BotProfile*, 0x08)."
+  },
+  "BotProfile::Aggression": {
+    "offsets": {
+      "windows": 8,
+      "linux": 8
+    },
+    "comment": "m_aggression (0x08), 0..1."
+  },
+  "BotProfile::Skill": {
+    "offsets": {
+      "windows": 12,
+      "linux": 12
+    },
+    "comment": "m_skill (0x0C), 0..1."
+  },
+  "BotProfile::Teamwork": {
+    "offsets": {
+      "windows": 16,
+      "linux": 16
+    },
+    "comment": "m_teamwork (0x10), 0..1."
+  },
+  "BotProfile::WeaponPref": {
+    "offsets": {
+      "windows": 36,
+      "linux": 36
+    },
+    "comment": "m_weaponPreference (0x24), WORD[16] item def index, stride 2."
+  },
+  "BotProfile::WeaponPrefCount": {
+    "offsets": {
+      "windows": 68,
+      "linux": 68
+    },
+    "comment": "m_weaponPreferenceCount (0x44)."
+  },
+  "BotProfile::Cost": {
+    "offsets": {
+      "windows": 72,
+      "linux": 72
+    },
+    "comment": "m_cost (0x48)."
+  },
+  "BotProfile::Difficulty": {
+    "offsets": {
+      "windows": 80,
+      "linux": 80
+    },
+    "comment": "m_difficultyFlags (0x50), bit per EASY/NORMAL/HARD/EXPERT."
+  },
+  "BotProfile::ReactionTime": {
+    "offsets": {
+      "windows": 88,
+      "linux": 88
+    },
+    "comment": "m_reactionTime (0x58)."
+  },
+  "BotProfile::AttackDelay": {
+    "offsets": {
+      "windows": 92,
+      "linux": 92
+    },
+    "comment": "m_attackDelay (0x5C)."
+  },
+  "BotProfile::LookAngleMaxAccelAttacking": {
+    "offsets": {
+      "windows": 120,
+      "linux": 120
+    },
+    "comment": "m_lookAngleMaxAccelAttacking (0x78)."
+  },
+  "BotProfile::LookAngleStiffnessAttacking": {
+    "offsets": {
+      "windows": 124,
+      "linux": 124
+    },
+    "comment": "m_lookAngleStiffnessAttacking (0x7C)."
+  },
+  "BotProfile::LookAngleDampingAttacking": {
+    "offsets": {
+      "windows": 128,
+      "linux": 128
+    },
+    "comment": "m_lookAngleDampingAttacking (0x80)."
+  },
   "CBaseEntity::Identity": {
     "offsets": {
       "windows": 16,

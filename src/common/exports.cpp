@@ -4,6 +4,7 @@
 #include "MotionRecorder.h"
 #include "InputInjector.h"
 #include "BuyControllerState.h"
+#include "BotProfile.h"
 
 #include <cstdint>
 #include <string>
@@ -41,7 +42,15 @@ extern "C" BC_EXPORT int BotController_IsLocked(int slot, int kind)
 
 extern "C" BC_EXPORT int BotController_GetVersion()
 {
-    return 11;
+    return 12;
+}
+
+// Read a bot's BotProfile by slot. 0 ok / -1 no live bot or null profile.
+extern "C" BC_EXPORT int BotController_GetProfile(int slot, BotController::BotProfileData *out)
+{
+    if (!out)
+        return -1;
+    return BotController::BotProfile::ReadProfile(slot, *out) ? 0 : -1;
 }
 
 // ---- Bot buy plans ----
